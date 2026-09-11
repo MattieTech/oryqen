@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables & secrets
+.env
+*.env
+!.env.example
+
+# Database & local data
+backend/data/db/*.db
+backend/data/db/*.sqlite
+backend/data/db/*.sqlite3
+backend/data/materials/*
+!backend/data/materials/.gitkeep
+backend/data/vectors/*
+!backend/data/vectors/.gitkeep
+backend/data/voice/*
+!backend/data/voice/.gitkeep
+
+# Pytest & tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & temp
+*.log
+*.tmp
+*.temp
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

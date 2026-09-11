@@ -1,0 +1,26 @@
+# ORYQEN Backend Dependencies
+# Core API
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+python-multipart==0.0.20
+
+# PDF Processing
+pymupdf==1.25.5
+
+# AI / RAG
+langchain==0.3.25
+langchain-community==0.3.24
+langchain-text-splitters==0.3.8
+
+# Vector Store
+faiss-cpu==1.11.0
+
+# Embeddings & LLM (via Ollama)
+ollama==0.5.1
+
+# Database
+aiosqlite==0.21.0
+
+# Utilities
+pydantic==2.11.4
+httpx==0.28.1

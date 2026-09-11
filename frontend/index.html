@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ORYQEN — General AI & AI Tutor Platform</title>
+  <meta name="description" content="ORYQEN is an advanced dual-purpose AI assistant and educational intelligence platform. Operates both offline and online.">
+  
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-layout" id="appLayout">
+    
+    <!-- Mobile Navigation Overlay -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar" id="sidebar">
+      <!-- Sidebar Header -->
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-mark anim-orbit">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M12 3a9 9 0 0 1 9 9" class="brand-orbit-arc"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </div>
+          <div class="brand-text-group">
+            <span class="brand-name">ORYQEN</span>
+            <span class="brand-tagline">AI Platform</span>
+          </div>
+        </div>
+        <button class="icon-btn mobile-close-btn" id="closeSidebarBtn" title="Close Sidebar" aria-label="Close Sidebar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- New Chat Button -->
+      <div class="sidebar-action">
+        <button class="new-chat-btn" id="newChatBtn">
+          <svg class="anim-spin-hover" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>New Session</span>
+          <span class="key-hint">Ctrl+K</span>
+        </button>
+      </div>
+
+      <!-- Workspace Switcher in Sidebar -->
+      <div class="workspace-nav">
+        <button class="workspace-tab-btn active" id="wsNavGeneral" data-ws="general">
+          <svg class="anim-float-subtle" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+          <span>General AI</span>
+        </button>
+        <button class="workspace-tab-btn" id="wsNavTutor" data-ws="tutor">
+          <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+          </svg>
+          <span>AI Tutor</span>
+          <span class="badge-pill">12 Modes</span>
+        </button>
+      </div>
+
+      <!-- Conversations History -->
+      <div class="sidebar-history">
+        <div class="history-label-row">
+          <span class="history-label">Sessions</span>
+          <button class="clear-all-btn" id="clearAllChatsBtn" title="Clear all chat history">Clear All</button>
+        </div>
+        <div class="conversations-search-wrap">
+          <input type="text" id="convSearchInput" class="conv-search-input" placeholder="Search conversations...">
+        </div>
+        <div class="conversations-list" id="conversationsList">
+          <div class="history-empty" id="historyEmpty">
+            <span>No conversations yet</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <!-- AI Mode Toggle -->
+        <div class="control-group">
+          <div class="control-label-row">
+            <span class="control-label">Intelligence Mode</span>
+            <span class="mode-status-text" id="sidebarModeStatus">Offline (Local)</span>
+          </div>
+          <div class="segmented-control" id="modeSegmented">
+            <button class="seg-btn active" data-mode="offline" id="segModeOffline" title="100% On-device, no internet required">
+              <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+              <span>Offline</span>
+            </button>
+            <button class="seg-btn" data-mode="online" id="segModeOnline" title="Cloud intelligence with ORYQEN Swift & Deep Research">
+              <svg class="anim-orbit" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+              </svg>
+              <span>Online</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Secondary Navigation Links -->
+        <div class="sidebar-links">
+          <button class="sub-link-btn" id="openDocsModalBtn">
+            <svg class="anim-float-subtle" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+            <span>My Materials</span>
+            <span class="counter-badge" id="docsCountBadge">0</span>
+          </button>
+
+          <button class="sub-link-btn" id="openMemoryModalBtn">
+            <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24A2.5 2.5 0 0 1 9.5 2Z"></path>
+              <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24A2.5 2.5 0 0 0 14.5 2Z"></path>
+            </svg>
+            <span>AI Memory</span>
+            <span class="pill-indicator" id="memoryIndicator">Active</span>
+          </button>
+
+          <button class="sub-link-btn" id="openSubscriptionBtn">
+            <svg class="anim-float-subtle" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="7"></circle>
+              <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+            </svg>
+            <span>Subscription</span>
+            <span class="tier-pill" id="tierPill">Free</span>
+          </button>
+          
+          <button class="sub-link-btn" id="openSettingsBtn">
+            <svg class="anim-spin-hover" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span>Settings</span>
+          </button>
+        </div>
+
+        <!-- User Profile Quick Bar -->
+        <div class="sidebar-user-card" id="sidebarUserCard">
+          <div class="user-avatar" id="sidebarUserAvatar">S</div>
+          <div class="user-info">
+            <span class="user-name" id="sidebarUserName">Student</span>
+            <span class="user-level" id="sidebarUserLevel">Undergraduate</span>
+          </div>
+          <button class="icon-btn-sm" id="openAuthModalBtn" title="Account & Profile">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ================= MAIN WORKSPACE ================= -->
+    <main class="main-workspace">
+      <!-- Top Mobile App Bar -->
+      <header class="top-header">
+        <div class="header-left">
+          <button class="icon-btn mobile-menu-btn" id="openSidebarBtn" title="Menu" aria-label="Open Sidebar Menu">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          
+          <div class="mobile-app-brand">
+            <span class="app-brand-title">ORYQEN</span>
+          </div>
+
+          <!-- Workspace Segmented Toggle -->
+          <div class="header-workspace-toggle">
+            <button class="header-ws-btn active" id="headerWsGeneral" data-ws="general">
+              <span>General</span>
+            </button>
+            <button class="header-ws-btn" id="headerWsTutor" data-ws="tutor">
+              <span>Tutor</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <!-- Active Attached Document Pill -->
+          <div class="active-doc-pill hidden" id="activeDocPill">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            </svg>
+            <span class="doc-title-text" id="activeDocName">Document</span>
+            <button class="detach-doc-btn" id="detachDocBtn" title="Detach document">&times;</button>
+          </div>
+
+          <!-- Mode Indicator Badge (Tap to toggle offline/online) -->
+          <button type="button" class="status-badge-btn" id="headerStatusBadge" title="Tap to toggle Offline/Online mode">
+            <span class="status-dot anim-pulse-dot" id="headerStatusDot"></span>
+            <span class="status-label" id="headerStatusLabel">Offline</span>
+          </button>
+
+          <!-- New Chat Quick Action -->
+          <button class="icon-btn header-action-btn" id="headerNewChatBtn" title="New Session">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+
+          <!-- Real User Account Pill / Sign In Trigger -->
+          <button type="button" class="header-account-btn" id="headerUserBtn" title="Account & Profile">
+            <span class="header-user-avatar" id="headerUserAvatar">G</span>
+            <span class="header-user-label desktop-only" id="headerUserName">Sign In</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- AI TUTOR MODE CONTROLS BAR (Visible when in AI Tutor workspace) -->
+      <div class="tutor-controls-bar hidden" id="tutorControlsBar">
+        <div class="tutor-modes-scroll" id="tutorModesScroll">
+          <button class="tutor-mode-chip active" data-tutor-mode="learn">
+            <svg class="anim-float-subtle" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
+            <span>Learn</span>
+          </button>
+          <button class="tutor-mode-chip" data-tutor-mode="practice">
+            <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            <span>Practice</span>
+          </button>
+          <button class="tutor-mode-chip" data-tutor-mode="quiz">
+            <svg class="anim-spin-hover" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span>Quiz Mode</span>
+          </button>
+          <button class="tutor-mode-chip" data-tutor-mode="exam">
+            <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>Exam Simulator</span>
+          </button>
+          <button class="tutor-mode-chip" data-tutor-mode="flashcard">
+            <svg class="anim-float-subtle" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line></svg>
+            <span>Flashcards</span>
+          </button>
+          <button class="tutor-mode-chip" data-tutor-mode="explain">
+            <svg class="anim-float-subtle" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6"></path><path d="M10 22h4"></path><path d="M12 2a7 7 0 0 0-7 7c0 2.5 1.5 4.5 3 6h8c1.5-1.5 3-3.5 3-6a7 7 0 0 0-7-7z"></path></svg>
+            <span>Explain Simple</span>
+          </button>
+          <button class="tutor-mode-chip" data-tutor-mode="socratic">
+            <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            <span>Socratic Method</span>
+          </button>
+          <button class="tutor-mode-chip" data-tutor-mode="mistake_analysis">
+            <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span>Mistake Analysis</span>
+          </button>
+          <button class="tutor-mode-chip" data-tutor-mode="study_plan">
+            <svg class="anim-float-subtle" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span>Study Planner</span>
+          </button>
+          <button class="tutor-mode-chip" data-tutor-mode="revision">
+            <svg class="anim-spin-hover" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+            <span>Revision</span>
+          </button>
+        </div>
+
+        <div class="tutor-sub-options">
+          <select id="tutorLevelSelect" class="tutor-select-sm" title="Education Level">
+            <option value="beginner">Beginner (Secondary)</option>
+            <option value="intermediate" selected>Intermediate (Undergrad)</option>
+            <option value="advanced">Advanced (Postgrad)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Chat Viewport -->
+      <div class="chat-viewport" id="chatViewport">
+        <div class="chat-messages-container" id="chatMessages">
+          
+          <!-- Welcome Screen (General AI) -->
+          <div class="welcome-screen" id="welcomeGeneralScreen">
+            <div class="welcome-mark anim-orbit">
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M12 3a9 9 0 0 1 9 9" class="brand-orbit-arc"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </div>
+            <h1 class="welcome-title">What can I help you with?</h1>
+            <p class="welcome-subtitle">
+              ORYQEN is your all-purpose AI platform with specialized educational intelligence. Available offline and online.
+            </p>
+
+            <div class="suggestions-grid">
+              <button class="suggestion-card anim-card" data-prompt="Explain how quantum computing works using an everyday analogy and step-by-step logic.">
+                <div class="suggestion-header">
+                  <span class="suggestion-title">Explain a concept</span>
+                  <svg class="anim-float" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 18h6"></path><path d="M10 22h4"></path><path d="M12 2a7 7 0 0 0-7 7c0 2.5 1.5 4.5 3 6h8c1.5-1.5 3-3.5 3-6a7 7 0 0 0-7-7z"></path>
+                  </svg>
+                </div>
+                <p class="suggestion-desc">Quantum computing explained with intuitive physical analogies</p>
+              </button>
+
+              <button class="suggestion-card anim-card" data-prompt="Write a Python script that processes a CSV file, cleans missing values, and visualizes trends.">
+                <div class="suggestion-header">
+                  <span class="suggestion-title">Write code</span>
+                  <svg class="anim-pulse" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>
+                  </svg>
+                </div>
+                <p class="suggestion-desc">Production-ready Python data cleaner and analyzer</p>
+              </button>
+
+              <button class="suggestion-card anim-card" data-prompt="Deep research the latest developments in solar cell efficiency and perovskite tandem technology.">
+                <div class="suggestion-header">
+                  <span class="suggestion-title">Deep Research</span>
+                  <svg class="anim-orbit" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                  </svg>
+                </div>
+                <p class="suggestion-desc">Grounded web research with verified source citations</p>
+              </button>
+
+              <button class="suggestion-card anim-card" data-prompt="Analyze the intellectual debate between Nigeria and Ghana regarding economic integration, culture, and governance.">
+                <div class="suggestion-header">
+                  <span class="suggestion-title">Intellectual Debate</span>
+                  <svg class="anim-float" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                </div>
+                <p class="suggestion-desc">Comprehensive comparative analysis of regional development</p>
+              </button>
+            </div>
+          </div>
+
+          <!-- Welcome Screen (AI Tutor Workspace) -->
+          <div class="welcome-screen hidden" id="welcomeTutorScreen">
+            <div class="welcome-mark anim-pulse-subtle">
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+                <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+              </svg>
+            </div>
+            <h1 class="welcome-title">ORYQEN AI Tutor</h1>
+            <p class="welcome-subtitle">
+              Personalized educational assistant. Select a learning mode above, or pick a study action below to start learning.
+            </p>
+
+            <div class="suggestions-grid">
+              <button class="suggestion-card anim-card tutor-quick-btn" data-tutor-action="quiz" data-topic="Physics: Newton's Laws & Mechanics">
+                <div class="suggestion-header">
+                  <span class="suggestion-title">Take a Quick Quiz</span>
+                  <svg class="anim-spin-hover" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+                <p class="suggestion-desc">Instant 5-question test with scoring and detailed explanations</p>
+              </button>
+
+              <button class="suggestion-card anim-card tutor-quick-btn" data-tutor-action="flashcard" data-topic="Organic Chemistry Functional Groups">
+                <div class="suggestion-header">
+                  <span class="suggestion-title">Generate Flashcards</span>
+                  <svg class="anim-float" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line></svg>
+                </div>
+                <p class="suggestion-desc">Interactive 3D flip study cards for rapid memorization</p>
+              </button>
+
+              <button class="suggestion-card anim-card tutor-quick-btn" data-tutor-action="study_plan" data-topic="Final Examinations">
+                <div class="suggestion-header">
+                  <span class="suggestion-title">Create Study Plan</span>
+                  <svg class="anim-pulse" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                </div>
+                <p class="suggestion-desc">Personalized schedule generated from your exam target date</p>
+              </button>
+
+              <button class="suggestion-card anim-card tutor-quick-btn" data-tutor-action="socratic" data-topic="Thermodynamics & Entropy">
+                <div class="suggestion-header">
+                  <span class="suggestion-title">Socratic Tutoring</span>
+                  <svg class="anim-float" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                </div>
+                <p class="suggestion-desc">Guided reasoning through questions so you discover the answer</p>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Chat Input Bar -->
+      <div class="chat-input-wrapper">
+        <form class="chat-input-card" id="chatForm">
+          
+          <!-- Attached Document Preview -->
+          <div class="input-attached-bar hidden" id="inputAttachedBar">
+            <div class="attached-chip">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <span id="inputAttachedDocName">document.pdf</span>
+              <button type="button" class="remove-chip-btn" id="removeInputDocBtn" title="Remove attachment">&times;</button>
+            </div>
+          </div>
+
+          <!-- Live Voice Recording / Preview Bar -->
+          <div class="voice-recorder-bar hidden" id="voiceRecorderBar">
+            <div class="voice-live-state" id="voiceLiveState">
+              <div class="voice-pulsing-dot anim-pulse"></div>
+              <span class="voice-timer" id="voiceTimer">00:00</span>
+              <div class="audio-waveform-bars" id="waveformBars">
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+              </div>
+              <button type="button" class="btn-sm btn-secondary" id="stopRecordingBtn">Stop Recording</button>
+            </div>
+
+            <div class="voice-preview-state hidden" id="voicePreviewState">
+              <audio id="voiceAudioPreview" controls class="voice-audio-element"></audio>
+              <div class="voice-preview-actions">
+                <button type="button" class="btn-sm btn-ghost text-danger" id="discardVoiceBtn" title="Discard recording">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  <span>Discard</span>
+                </button>
+                <button type="button" class="btn-sm btn-primary" id="sendVoiceBtn">
+                  <span>Send Voice Message</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="input-row">
+            <!-- Attachment Trigger -->
+            <button type="button" class="input-action-btn" id="attachFileBtn" title="Attach document">
+              <svg class="anim-float-subtle" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+              </svg>
+            </button>
+
+            <!-- Voice Recording Trigger -->
+            <button type="button" class="input-action-btn mic-btn" id="micBtn" title="Record Voice Question">
+              <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" id="micIcon">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+
+            <!-- Deep Web Research Toggle (Online mode) -->
+            <button type="button" class="input-action-btn research-toggle-btn" id="researchToggleBtn" title="Toggle Deep Web Research">
+              <svg class="anim-orbit" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+              </svg>
+            </button>
+
+            <!-- Main Input -->
+            <textarea 
+              id="chatInput" 
+              placeholder="Ask ORYQEN anything..." 
+              rows="1" 
+              aria-label="Ask ORYQEN"
+            ></textarea>
+
+            <!-- Send / Stop Button -->
+            <button type="submit" class="submit-btn" id="sendBtn" aria-label="Send message">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" id="sendIcon">
+                <line x1="12" y1="19" x2="12" y2="5"></line>
+                <polyline points="5 12 12 5 19 12"></polyline>
+              </svg>
+            </button>
+          </div>
+        </form>
+
+        <div class="input-footnote">
+          <span id="footerModeText">Offline mode — AI runs locally on your device. Developed by MattieTech.</span>
+        </div>
+      </div>
+
+      <!-- Native Mobile App Bottom Navigation Bar -->
+      <nav class="mobile-bottom-nav" id="mobileBottomNav">
+        <button type="button" class="bnav-btn active" id="bnavChat" data-bnav="chat" title="Chat">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>Chat</span>
+        </button>
+
+        <button type="button" class="bnav-btn" id="bnavTutor" data-bnav="tutor" title="AI Tutor">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+          </svg>
+          <span>AI Tutor</span>
+        </button>
+
+        <button type="button" class="bnav-btn" id="bnavDocs" data-bnav="docs" title="Library & Textbooks">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          <span>Library</span>
+        </button>
+
+        <button type="button" class="bnav-btn" id="bnavSettings" data-bnav="settings" title="Settings & Account">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Settings</span>
+        </button>
+      </nav>
+    </main>
+  </div>
+
+  <!-- ================= MODAL: INTERACTIVE QUIZ & EXAM ================= -->
+  <div class="modal-overlay hidden" id="quizModal">
+    <div class="modal-container modal-large">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-badge-row">
+            <span class="tier-pill" id="quizTypeBadge">Interactive Quiz</span>
+            <span class="timer-pill hidden" id="quizTimerPill">15:00</span>
+          </div>
+          <h3 id="quizTitle">Assessment Quiz</h3>
+          <p id="quizSubtitle">Select the correct answer for each question.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeQuizModalBtn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="quiz-progress-bar-track">
+          <div class="quiz-progress-bar-fill" id="quizProgressFill" style="width: 20%;"></div>
+        </div>
+
+        <div class="quiz-question-card" id="quizQuestionCard">
+          <div class="question-number" id="quizQuestionNumber">Question 1 of 5</div>
+          <div class="question-text" id="quizQuestionText">Loading questions...</div>
+          <div class="quiz-options-list" id="quizOptionsList"></div>
+          
+          <!-- Answer Feedback Box -->
+          <div class="quiz-feedback-box hidden" id="quizFeedbackBox">
+            <div class="feedback-title" id="quizFeedbackTitle">Correct!</div>
+            <div class="feedback-explanation" id="quizFeedbackExplanation"></div>
+          </div>
+        </div>
+
+        <!-- Quiz Final Results View -->
+        <div class="quiz-results-card hidden" id="quizResultsCard">
+          <div class="score-circle anim-pulse">
+            <span class="score-number" id="finalScorePercent">80%</span>
+            <span class="score-caption" id="finalScoreFraction">4 / 5 Correct</span>
+          </div>
+          <h4 id="quizPerformanceVerdict">Great Job!</h4>
+          <p id="quizPerformanceAdvice">You demonstrated solid mastery of foundational principles.</p>
+          <div class="weak-topics-summary hidden" id="quizWeakTopicsWrap">
+            <h5>Topics for Revision:</h5>
+            <div class="weak-chips-list" id="quizWeakChipsList"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="prevQuestionBtn">Previous</button>
+        <button type="button" class="btn btn-primary" id="nextQuestionBtn">Submit Answer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: 3D FLASHCARDS ================= -->
+  <div class="modal-overlay hidden" id="flashcardModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Interactive Flashcards</h3>
+          <p>Click or press Space to flip card. Use arrows to navigate.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeFlashcardModalBtn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="flashcard-deck-indicator">
+          <span id="flashcardCounter">Card 1 of 8</span>
+        </div>
+
+        <div class="flashcard-3d-scene">
+          <div class="flashcard-3d-card" id="flashcardCard">
+            <div class="flashcard-face flashcard-front">
+              <span class="face-tag">QUESTION / TERM</span>
+              <div class="face-content" id="flashcardFrontText">Front text...</div>
+              <span class="flip-hint">Click to flip</span>
+            </div>
+            <div class="flashcard-face flashcard-back">
+              <span class="face-tag">EXPLANATION / ANSWER</span>
+              <div class="face-content" id="flashcardBackText">Back text...</div>
+              <span class="flip-hint">Click to flip</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flashcard-controls">
+          <button class="btn btn-secondary" id="prevCardBtn">&larr; Previous</button>
+          <button class="btn btn-ghost" id="flipCardBtn">Flip Card</button>
+          <button class="btn btn-secondary" id="nextCardBtn">Next &rarr;</button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissFlashcardBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: STUDENT DASHBOARD ================= -->
+  <div class="modal-overlay hidden" id="studentDashboardModal">
+    <div class="modal-container modal-large">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Student Learning Dashboard</h3>
+          <p>Real-world analytics tracking your progress, streak, and revision needs.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeDashboardBtn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="stats-overview-grid">
+          <div class="stat-card">
+            <span class="stat-icon anim-pulse">🔥</span>
+            <span class="stat-value" id="dashStreakVal">1 Day</span>
+            <span class="stat-label">Study Streak</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon anim-float">📊</span>
+            <span class="stat-value" id="dashAvgScore">0%</span>
+            <span class="stat-label">Quiz Average</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon anim-pulse">⏱️</span>
+            <span class="stat-value" id="dashStudyMinutes">15 m</span>
+            <span class="stat-label">Study Time</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon anim-orbit">🗂️</span>
+            <span class="stat-value" id="dashFlashcardCount">0</span>
+            <span class="stat-label">Saved Cards</span>
+          </div>
+        </div>
+
+        <!-- Smart Recommendations Section -->
+        <div class="dash-section-title">Smart Educational Recommendations</div>
+        <div class="recs-list" id="dashRecsList">
+          <div class="rec-card">
+            <div class="rec-icon">
+              <svg class="anim-pulse" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+            <div class="rec-content">
+              <h4>Start with a Learning Check</h4>
+              <p>Take a 5-question assessment quiz to diagnose your strengths and weaknesses.</p>
+            </div>
+            <button class="btn-sm btn-primary" onclick="startRecommendedAction('quiz')">Take Quiz</button>
+          </div>
+        </div>
+
+        <!-- Weak Topics Section -->
+        <div class="dash-section-title">Focus Areas & Weak Concepts</div>
+        <div class="weak-topics-box" id="dashWeakTopicsBox">
+          <span class="text-muted-sm">No weak areas identified yet. Take a quiz to map your progress!</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissDashboardBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: AI MEMORY ================= -->
+  <div class="modal-overlay hidden" id="memoryModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>AI Memory & Personalization</h3>
+          <p>View and manage what ORYQEN remembers about your learning preferences.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeMemoryModalBtn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="memory-toggle-row">
+          <div>
+            <strong>Enable Memory</strong>
+            <p class="settings-help">When enabled, ORYQEN adapts to your level and remembered preferences.</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="memoryToggleInput" checked>
+            <span class="slider round"></span>
+          </label>
+        </div>
+
+        <div class="dash-section-title">Saved Memories</div>
+        <div class="memories-list" id="memoriesList"></div>
+
+        <div class="add-memory-row">
+          <input type="text" id="newMemoryKey" class="settings-input" placeholder="e.g. Target Goal">
+          <input type="text" id="newMemoryVal" class="settings-input" placeholder="e.g. Pass WAEC / JAMB Physics">
+          <button type="button" class="btn btn-primary" id="addMemoryBtn">Save</button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost text-danger" id="clearAllMemoriesBtn">Clear All Memory</button>
+        <button type="button" class="btn btn-secondary" id="dismissMemoryModalBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: SUBSCRIPTIONS ================= -->
+  <div class="modal-overlay hidden" id="subscriptionModal">
+    <div class="modal-container modal-large">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>ORYQEN Plans & Quotas</h3>
+          <p>Transparent pricing tailored for African and global students.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeSubscriptionModalBtn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Quotas Bar -->
+        <div class="subscription-usage-bar">
+          <div class="usage-meter">
+            <span class="usage-label">Daily Messages</span>
+            <div class="meter-track"><div class="meter-fill" id="meterMsgFill" style="width: 20%;"></div></div>
+            <span class="meter-count" id="meterMsgCount">10 / 50</span>
+          </div>
+          <div class="usage-meter">
+            <span class="usage-label">Deep Research</span>
+            <div class="meter-track"><div class="meter-fill" id="meterResFill" style="width: 20%;"></div></div>
+            <span class="meter-count" id="meterResCount">1 / 5</span>
+          </div>
+          <div class="usage-meter">
+            <span class="usage-label">Uploaded Documents</span>
+            <div class="meter-track"><div class="meter-fill" id="meterDocFill" style="width: 33%;"></div></div>
+            <span class="meter-count" id="meterDocCount">1 / 3</span>
+          </div>
+        </div>
+
+        <!-- Plan Comparison Cards -->
+        <div class="plans-grid">
+          <!-- Freemium -->
+          <div class="plan-card active-plan" id="planFreeCard">
+            <div class="plan-badge">CURRENT PLAN</div>
+            <h4>Freemium</h4>
+            <div class="plan-price">₦0 <span>/ month</span></div>
+            <div class="plan-price-usd">$0 / month</div>
+            <ul class="plan-features">
+              <li>✓ 50 AI messages / day</li>
+              <li>✓ 100% Offline AI inference</li>
+              <li>✓ Basic AI Tutor modes</li>
+              <li>✓ 3 Document uploads</li>
+              <li>✓ Voice interaction</li>
+            </ul>
+            <button class="btn btn-secondary plan-btn disabled" disabled>Active</button>
+          </div>
+
+          <!-- Plus -->
+          <div class="plan-card highlighted-plan" id="planPlusCard">
+            <div class="plan-badge best-value">POPULAR</div>
+            <h4>Plus</h4>
+            <div class="plan-price">₦5,000 <span>/ month</span></div>
+            <div class="plan-price-usd">$5 / month</div>
+            <ul class="plan-features">
+              <li>✓ 500 AI messages / day</li>
+              <li>✓ Advanced AI Tutor + Exam Simulator</li>
+              <li>✓ Deep Research with citations</li>
+              <li>✓ 20 Document uploads</li>
+              <li>✓ Unlimited Voice & Speech synthesis</li>
+              <li>✓ Learning weakness analytics</li>
+            </ul>
+            <button class="btn btn-primary plan-btn" id="upgradePlusBtn">Upgrade to Plus</button>
+          </div>
+
+          <!-- Pro -->
+          <div class="plan-card" id="planProCard">
+            <div class="plan-badge">POWER USER</div>
+            <h4>Pro</h4>
+            <div class="plan-price">₦12,000 <span>/ month</span></div>
+            <div class="plan-price-usd">$12 / month</div>
+            <ul class="plan-features">
+              <li>✓ Unlimited AI messages</li>
+              <li>✓ Priority access to ORYQEN Reason</li>
+              <li>✓ Full Deep Web Research workflow</li>
+              <li>✓ Unlimited document processing</li>
+              <li>✓ Complete Student analytics suite</li>
+              <li>✓ Offline model sync priority</li>
+            </ul>
+            <button class="btn btn-secondary plan-btn" id="upgradeProBtn">Upgrade to Pro</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissSubscriptionBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: AUTHENTICATION & PROFILE ================= -->
+  <div class="modal-overlay hidden" id="authModal">
+    <div class="modal-container auth-modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 id="authModalTitle">ORYQEN Scholar Account</h3>
+          <p id="authModalSubtitle">Sign in or create your profile to sync learning notes, study plans, and preferences.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeAuthModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Auth Tabs (Login / Register / Profile) -->
+        <div class="auth-tabs" id="authTabs">
+          <button class="auth-tab active" id="authTabLogin" data-tab="login">Sign In</button>
+          <button class="auth-tab" id="authTabRegister" data-tab="register">Create Account</button>
+          <button class="auth-tab hidden" id="authTabProfile" data-tab="profile">My Profile</button>
+        </div>
+
+        <!-- Login Form -->
+        <form id="loginForm" class="auth-form-panel">
+          <div class="settings-field">
+            <label class="settings-label" for="loginEmail">Academic or Personal Email</label>
+            <input type="email" id="loginEmail" class="settings-input" placeholder="scholar@university.edu" required autocomplete="email">
+          </div>
+          <div class="settings-field">
+            <div class="field-label-row">
+              <label class="settings-label" for="loginPassword">Password</label>
+              <a href="#" class="field-sublink" id="forgotPasswordLink">Forgot?</a>
+            </div>
+            <div class="pwd-input-wrap">
+              <input type="password" id="loginPassword" class="settings-input" placeholder="••••••••••••" required autocomplete="current-password">
+              <button type="button" class="pwd-eye-btn" id="loginPwdToggle" title="Toggle password visibility" aria-label="Toggle password visibility">
+                <svg class="eye-open-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                <svg class="eye-closed-icon hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="auth-aux-row">
+            <label class="checkbox-label">
+              <input type="checkbox" id="rememberMeCheckbox" checked>
+              <span>Remember me on this browser</span>
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary full-width" id="submitLoginBtn">
+            <span>Sign In to ORYQEN</span>
+          </button>
+
+          <div class="auth-switch-row">
+            <span>New to ORYQEN?</span>
+            <button type="button" class="btn-link" id="switchRegisterLink">Create an account</button>
+          </div>
+        </form>
+
+        <!-- Register Form -->
+        <form id="registerForm" class="auth-form-panel hidden">
+          <div class="settings-field">
+            <label class="settings-label" for="regName">Full Name</label>
+            <input type="text" id="regName" class="settings-input" placeholder="Adaeze Matthew" required autocomplete="name">
+          </div>
+          <div class="settings-field">
+            <label class="settings-label" for="regEmail">Academic or Work Email</label>
+            <input type="email" id="regEmail" class="settings-input" placeholder="scholar@university.edu" required autocomplete="email">
+          </div>
+          <div class="settings-field">
+            <label class="settings-label" for="regPassword">Create Master Password</label>
+            <div class="pwd-input-wrap">
+              <input type="password" id="regPassword" class="settings-input" placeholder="Minimum 8 characters" required autocomplete="new-password">
+              <button type="button" class="pwd-eye-btn" id="regPwdToggle" title="Toggle password visibility" aria-label="Toggle password visibility">
+                <svg class="eye-open-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                <svg class="eye-closed-icon hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+              </button>
+            </div>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label" for="regLevel">Academic & Professional Level</label>
+            <select id="regLevel" class="settings-input">
+              <option value="beginner">Secondary / High School Student</option>
+              <option value="intermediate" selected>Undergraduate / University Student</option>
+              <option value="advanced">Postgraduate Researcher / PhD Candidate</option>
+              <option value="engineer">Software Engineer & AI Builder</option>
+              <option value="educator">Educator / Professor / Teacher</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label" for="regSubjects">Primary Focus or Major</label>
+            <input type="text" id="regSubjects" class="settings-input" placeholder="e.g. Computer Science, Medicine, Mechanical Engineering">
+          </div>
+
+          <div class="auth-aux-row">
+            <label class="checkbox-label">
+              <input type="checkbox" id="regTermsCheckbox" checked required>
+              <span>I accept ORYQEN Academic Integrity & Terms</span>
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary full-width" id="submitRegisterBtn">
+            <span>Create Free Student Account</span>
+          </button>
+
+          <div class="auth-switch-row">
+            <span>Already have an account?</span>
+            <button type="button" class="btn-link" id="switchLoginLink">Sign in instead</button>
+          </div>
+        </form>
+
+        <!-- Profile Form (Active Session) -->
+        <form id="profileForm" class="auth-form-panel hidden">
+          <div class="profile-card-header">
+            <div class="profile-large-avatar" id="profAvatar">OM</div>
+            <div class="profile-header-info">
+              <h4 id="profDisplayFullname">Scholar User</h4>
+              <p id="profDisplayEmail">scholar@oryqen.ai</p>
+              <span class="badge badge-accent" id="profTierBadge">ORYQEN Scholar Pro</span>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <label class="settings-label" for="profName">Display Name</label>
+            <input type="text" id="profName" class="settings-input">
+          </div>
+          <div class="settings-field">
+            <label class="settings-label" for="profLevel">Academic Level</label>
+            <select id="profLevel" class="settings-input">
+              <option value="beginner">Secondary / High School</option>
+              <option value="intermediate">Undergraduate / College</option>
+              <option value="advanced">Postgraduate / Professional</option>
+              <option value="engineer">Software Engineer & AI Builder</option>
+              <option value="educator">Educator / Professor</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label" for="profSubjects">Specialization & Focus</label>
+            <input type="text" id="profSubjects" class="settings-input" placeholder="Physics, Computer Science, Math">
+          </div>
+
+          <div class="profile-action-buttons">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <button type="button" class="btn btn-danger-outline" id="profLogoutBtn">Log Out</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer auth-modal-footer">
+        <button type="button" class="btn btn-ghost" id="continueGuestBtn">Continue as Guest Student</button>
+        <button type="button" class="btn btn-secondary" id="dismissAuthModalBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: DOCUMENTS ================= -->
+  <div class="modal-overlay hidden" id="docsModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Documents & Textbooks</h3>
+          <p>Upload PDFs, textbooks, or notes to ground AI responses with your materials.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeDocsModalBtn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="upload-dropzone" id="modalDropzone">
+          <input type="file" id="modalFileInput" accept=".pdf" class="file-input-hidden">
+          <div class="dropzone-inner">
+            <div class="upload-icon-wrap anim-float">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+            </div>
+            <p class="drop-primary">Click to upload or drag and drop</p>
+            <p class="drop-secondary">PDF files up to 50MB</p>
+          </div>
+        </div>
+
+        <div class="upload-progress-card hidden" id="modalUploadProgress">
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="modalProgressBar"></div>
+          </div>
+          <div class="progress-text-row">
+            <span id="modalProgressText">Processing document...</span>
+            <span id="modalProgressPercent">0%</span>
+          </div>
+        </div>
+
+        <div class="docs-section-heading">Uploaded Materials</div>
+        <div class="modal-docs-list" id="modalDocsList"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissDocsModalBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: SETTINGS CONTROL CENTER ================= -->
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal-container settings-modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>ORYQEN System Control Center</h3>
+          <p>Configure proprietary neural models, cloud intelligence, database sync, and audio.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeSettingsBtn" aria-label="Close Settings">&times;</button>
+      </div>
+
+      <div class="settings-modal-layout">
+        <!-- Sidebar Navigation Rail -->
+        <aside class="settings-nav-rail">
+          <button class="settings-nav-item active" data-tab="general">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <span>Appearance</span>
+          </button>
+          <button class="settings-nav-item" data-tab="models">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+            <span>AI Architecture</span>
+          </button>
+          <button class="settings-nav-item" data-tab="cloud">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+            <span>Cloud Intelligence</span>
+          </button>
+          <button class="settings-nav-item" data-tab="voice">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            <span>Voice & Audio</span>
+          </button>
+          <button class="settings-nav-item" data-tab="database">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+            <span>Supabase Sync</span>
+          </button>
+          <button class="settings-nav-item" data-tab="data">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span>Data & Privacy</span>
+          </button>
+        </aside>
+
+        <!-- Content Panels -->
+        <div class="settings-content-area">
+          <!-- Tab 1: Appearance -->
+          <div class="settings-tab-pane active" id="pane-general">
+            <div class="settings-section">
+              <div class="settings-section-title">Color Theme & Visual Atmosphere</div>
+              <div class="theme-picker-grid">
+                <button type="button" class="theme-card active" data-theme="dark">
+                  <span class="theme-preview dark-preview"></span>
+                  <span class="theme-name">ORYQEN Dark</span>
+                </button>
+                <button type="button" class="theme-card" data-theme="midnight">
+                  <span class="theme-preview midnight-preview"></span>
+                  <span class="theme-name">Midnight Indigo</span>
+                </button>
+                <button type="button" class="theme-card" data-theme="emerald">
+                  <span class="theme-preview emerald-preview"></span>
+                  <span class="theme-name">Cyber Emerald</span>
+                </button>
+                <button type="button" class="theme-card" data-theme="light">
+                  <span class="theme-preview light-preview"></span>
+                  <span class="theme-name">Clean Scholar (Light)</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Reading & Typography</div>
+              <div class="settings-field">
+                <label class="settings-label" for="settingFontSize">Interface Font Scale</label>
+                <select id="settingFontSize" class="settings-input">
+                  <option value="14px">Compact (14px)</option>
+                  <option value="15px" selected>Balanced (15px - Default)</option>
+                  <option value="16.5px">Comfortable (16.5px)</option>
+                  <option value="18px">Large Print (18px)</option>
+                </select>
+              </div>
+              <div class="settings-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="settingStreamTyping" checked>
+                  <span>Real-time token streaming animation</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: AI Architecture -->
+          <div class="settings-tab-pane" id="pane-models">
+            <div class="settings-section">
+              <div class="settings-section-title">Proprietary Cognitive Engines</div>
+              <div class="model-tier-cards">
+                <div class="model-spec-card active">
+                  <div class="spec-header">
+                    <span class="spec-name">ORYQEN Reason</span>
+                    <span class="badge badge-accent">Cloud Flagship</span>
+                  </div>
+                  <p class="spec-desc">Deep cognitive reasoning engine for step-by-step math derivations, complex coding, and Socratic tutoring.</p>
+                  <div class="spec-meta">
+                    <span>Context: 1M Tokens</span>
+                    <span>Modality: Multimodal Text & Vision</span>
+                  </div>
+                </div>
+
+                <div class="model-spec-card">
+                  <div class="spec-header">
+                    <span class="spec-name">ORYQEN Swift</span>
+                    <span class="badge badge-blue">Cloud High-Speed</span>
+                  </div>
+                  <p class="spec-desc">Low-latency model optimized for instant query answering, flashcard generation, and rapid summaries.</p>
+                  <div class="spec-meta">
+                    <span>Latency: ~350ms</span>
+                    <span>Efficiency: Ultra High</span>
+                  </div>
+                </div>
+
+                <div class="model-spec-card">
+                  <div class="spec-header">
+                    <span class="spec-name">ORYQEN Local Core</span>
+                    <span class="badge badge-secondary">On-Device Neural Engine</span>
+                  </div>
+                  <p class="spec-desc">Fully private, zero-internet on-device neural model running directly on your local hardware.</p>
+                  <div class="spec-meta">
+                    <span>Privacy: 100% Offline</span>
+                    <span>Hardware: CPU / NPU / GPU</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Generation Parameters</div>
+              <div class="settings-field">
+                <div class="field-label-row">
+                  <label class="settings-label" for="settingTempSlider">Creativity / Temperature</label>
+                  <span class="field-val-pill" id="tempValDisplay">0.40 (Precise)</span>
+                </div>
+                <input type="range" id="settingTempSlider" min="0" max="1" step="0.05" value="0.4" class="settings-range">
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: Cloud Intelligence -->
+          <div class="settings-tab-pane" id="pane-cloud">
+            <div class="settings-section">
+              <div class="settings-section-title">Universal Cloud License & API Key</div>
+              <p class="settings-help">ORYQEN Cloud Gateway connects directly to enterprise neural intelligence clusters. Enter your key to unlock unlimited high-speed inference.</p>
+              <div class="settings-field">
+                <label class="settings-label" for="apiKeyInput">Cloud License / API Key</label>
+                <div class="pwd-input-wrap">
+                  <input type="password" id="apiKeyInput" class="settings-input" placeholder="Enter ORYQEN Cloud Key / AI License" autocomplete="off">
+                  <button type="button" class="pwd-eye-btn" id="apiKeyEyeToggle" title="Toggle visibility">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="connection-action-row">
+                <button type="button" class="btn btn-primary" id="saveApiKeyBtn">
+                  <span>Save Key</span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="testCloudPingBtn">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                  <span>Test Connection</span>
+                </button>
+                <div class="connection-status-pill hidden" id="cloudPingResult">
+                  <span class="status-dot"></span>
+                  <span class="status-msg">Checking...</span>
+                </div>
+              </div>
+
+              <div class="settings-key-status" id="apiKeyStatus"></div>
+            </div>
+          </div>
+
+          <!-- Tab 4: Voice & Audio -->
+          <div class="settings-tab-pane" id="pane-voice">
+            <div class="settings-section">
+              <div class="settings-section-title">Speech-to-Text & Neural Audio</div>
+              <div class="settings-field">
+                <label class="settings-label" for="settingTtsVoice">Text-to-Speech Voice</label>
+                <select id="settingTtsVoice" class="settings-input">
+                  <option value="default">Default System Neural Voice</option>
+                  <option value="scholar-female">ORYQEN Scholar (Natural Female)</option>
+                  <option value="scholar-male">ORYQEN Professor (Deep Male)</option>
+                  <option value="tutor-warm">ORYQEN Tutor (Warm & Socratic)</option>
+                </select>
+              </div>
+
+              <div class="settings-field">
+                <div class="field-label-row">
+                  <label class="settings-label" for="settingSpeechRate">Speaking Pace</label>
+                  <span class="field-val-pill" id="speechRateDisplay">1.0x Normal</span>
+                </div>
+                <input type="range" id="settingSpeechRate" min="0.75" max="1.5" step="0.05" value="1.0" class="settings-range">
+              </div>
+
+              <button type="button" class="btn btn-secondary" id="testVoicePreviewBtn">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                <span>Preview Voice Audio</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Tab 5: Supabase Sync -->
+          <div class="settings-tab-pane" id="pane-database">
+            <div class="settings-section">
+              <div class="settings-section-title">Supabase Cloud Database & Embeddings</div>
+              <p class="settings-help">Connect ORYQEN to your managed PostgreSQL / Supabase cluster for cross-device synchronization, pgvector search, and permanent chat history.</p>
+
+              <div class="settings-field">
+                <label class="settings-label" for="supabaseUrlInput">Supabase Project URL</label>
+                <input type="text" id="supabaseUrlInput" class="settings-input" placeholder="https://your-project.supabase.co">
+              </div>
+
+              <div class="settings-field">
+                <label class="settings-label" for="supabaseKeyInput">Supabase Anon Public API Key</label>
+                <div class="pwd-input-wrap">
+                  <input type="password" id="supabaseKeyInput" class="settings-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+                  <button type="button" class="pwd-eye-btn" id="supabaseKeyEyeToggle" title="Toggle visibility">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="connection-action-row">
+                <button type="button" class="btn btn-primary" id="saveSupabaseBtn">
+                  <span>Save Supabase Config</span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="copySchemaSqlBtn">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  <span>Copy SQL Schema</span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="testDbConnectionBtn">
+                  <span>Test DB</span>
+                </button>
+              </div>
+              <div class="settings-key-status" id="supabaseStatus"></div>
+            </div>
+          </div>
+
+          <!-- Tab 6: Data, Privacy & Telemetry -->
+          <div class="settings-tab-pane" id="pane-data">
+            <div class="settings-section">
+              <div class="settings-section-title">Data Portability & Backups</div>
+              <p class="settings-help">Export your study records, flashcard reviews, and conversations in open formats.</p>
+              <div class="export-action-grid">
+                <button type="button" class="btn btn-secondary" id="exportAllDataBtn">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span>Export Full Account JSON</span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="exportChatMdBtn">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                  <span>Export Chat as Markdown</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Engine Architecture & Telemetry</div>
+              <div class="settings-info-grid">
+                <div class="settings-info-item">
+                  <span class="settings-info-label">Active Cloud Neural Engine</span>
+                  <span class="settings-info-value" id="settingsCloudModel">ORYQEN Reason / Swift</span>
+                </div>
+                <div class="settings-info-item">
+                  <span class="settings-info-label">On-Device Engine</span>
+                  <span class="settings-info-value" id="settingsLocalModel">ORYQEN Local Core</span>
+                </div>
+                <div class="settings-info-item">
+                  <span class="settings-info-label">Knowledge Vector Store</span>
+                  <span class="settings-info-value">FAISS (On-Device Neural Memory)</span>
+                </div>
+                <div class="settings-info-item">
+                  <span class="settings-info-label">Embedded Document Chunks</span>
+                  <span class="settings-info-value" id="settingsChunkCount">0 chunks indexed</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">About ORYQEN</div>
+              <p class="settings-about-text">
+                <strong>ORYQEN</strong> (pronounced <em>"Oi-ken"</em>) is a next-generation AI platform engineered by <strong>SyntaxNexus Developer</strong> (formerly MattieTech), founded and led by CEO <strong>Matthew Aliu</strong>. Built for real-world academic empowerment, deep research, and dual online/offline autonomy.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissSettingsBtn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: CITATION ================= -->
+  <div class="modal-overlay hidden" id="citationModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Source Citation</h3>
+          <p>Verified excerpt from document or web research.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeCitationModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="citation-meta-box">
+          <span class="citation-tag" id="citeDocTag">Source</span>
+          <span class="citation-tag" id="citePageTag">Reference</span>
+        </div>
+        <blockquote class="citation-quote" id="citeQuoteText">
+          Excerpt content...
+        </blockquote>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissCitationBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: SUPABASE SQL SCHEMA ================= -->
+  <div class="modal-overlay hidden" id="supabaseModal">
+    <div class="modal-container schema-modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Supabase Database Schema</h3>
+          <p>Run this script in your Supabase SQL Editor to provision tables, vector search, and RLS policies.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeSupabaseModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="schema-code-header">
+          <span>PostgreSQL / pgvector Ready</span>
+          <button type="button" class="btn btn-sm btn-primary" id="copySchemaInModalBtn">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <span>Copy Full SQL</span>
+          </button>
+        </div>
+        <pre class="schema-code-block" id="schemaCodeBlock"><code>-- Loading schema...</code></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissSupabaseModalBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Shelf -->
+  <div class="toast-shelf" id="toastShelf"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

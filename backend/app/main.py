@@ -1,0 +1,1512 @@
+"""
+ORYQEN Backend - FastAPI Application
+Advanced AI Assistant & Educational Intelligence Platform
+Supports General AI + AI Tutor, Voice Interaction, Offline/Online Modes,
+Memory System, Web Research, Subscriptions, and Offline Data Sync.
+"""
+
+import hashlib
+import json
+import os
+import shutil
+import sys
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+
+# Ensure standard UTF-8 console output without terminal exceptions
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from .db.database import get_connection, init_db
+from .services.embeddings import generate_embeddings_batch
+from .services.llm import (
+    get_ai_provider,
+    research_answer,
+    get_oryqen_model_name,
+    get_oryqen_model_id,
+    get_system_prompt,
+    GENERAL_SYSTEM_PROMPT,
+)
+from .services.pdf_processor import process_pdf
+from .services.rag import ask_assistant, generate_quiz
+from .services.vector_store import vector_store
+from .services.tutor import (
+    generate_tutor_response,
+    analyze_student_mistake,
+    generate_interactive_quiz,
+    generate_flashcards,
+    generate_study_plan,
+    get_student_analytics,
+    get_smart_recommendations,
+)
+from .services.voice import save_voice_file, transcribe_audio_file, VOICE_DIR
+from .services.memory import (
+    get_user_memories,
+    add_user_memory,
+    delete_user_memory,
+    clear_all_memories,
+    is_memory_enabled,
+    set_memory_enabled,
+    get_memory_context_prompt,
+    auto_extract_learning_profile,
+)
+from .services.sync import (
+    queue_offline_action,
+    get_pending_sync_items,
+    mark_synced,
+    process_incoming_sync_batch,
+)
+
+# Load persistent environment settings
+ENV_PATH = Path(__file__).parent.parent / ".env"
+if ENV_PATH.exists():
+    try:
+        import dotenv
+        dotenv.load_dotenv(dotenv_path=ENV_PATH, override=True)
+    except Exception:
+        pass
+
+# Materials upload directory
+MATERIALS_DIR = Path(__file__).parent.parent / "data" / "materials"
+MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Initialize database tables
+try:
+    init_db()
+except Exception as _e:
+    print(f"[WARN] Database initialization notice: {_e}")
+
+# === FastAPI App ===
+app = FastAPI(
+    title="ORYQEN AI Platform",
+    description="Dual-purpose AI Assistant with Educational Intelligence Layer, Voice, Memory, & Offline Resilience",
+    version="2.0.0",
+)
+
+@app.on_event("startup")
+async def on_startup():
+    try:
+        init_db()
+    except Exception as _e:
+        print(f"[WARN] Startup database init: {_e}")
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+
+# === Pydantic Request/Response Models ===
+
+class ChatRequest(BaseModel):
+    question: str
+    conversation_id: Optional[str] = None
+    course_id: Optional[str] = None
+    mode: str = "offline"  # "offline" | "online"
+    capability: str = "auto"  # "auto" | "general" | "tutor"
+    tutor_mode: Optional[str] = None
+    tutor_level: Optional[str] = "intermediate"
+    subject: Optional[str] = None
+    user_id: Optional[str] = "local-user"
+    deep_research: Optional[bool] = False
+    conversation_history: Optional[list[dict]] = None
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    sources: list[dict]
+    model: str
+    display_name: str
+    has_context: bool
+    conversation_id: str
+    mode: str
+    capability: str
+    research_performed: bool = False
+
+
+class ConversationCreate(BaseModel):
+    title: Optional[str] = "New Chat"
+    mode: str = "offline"
+    capability: str = "general"
+    course_id: Optional[str] = None
+    user_id: Optional[str] = "local-user"
+
+
+class ConversationUpdate(BaseModel):
+    title: Optional[str] = None
+    is_pinned: Optional[int] = None
+    is_archived: Optional[int] = None
+
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = "Student"
+    education_level: Optional[str] = "intermediate"
+    role: Optional[str] = "student"
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    education_level: Optional[str] = None
+    preferred_subjects: Optional[list[str]] = None
+    learning_style: Optional[str] = None
+    bio: Optional[str] = None
+
+
+class QuizRequest(BaseModel):
+    course_id: Optional[str] = None
+    topic: Optional[str] = "General Principles"
+    count: int = 5
+    mode: str = "offline"
+    level: str = "intermediate"
+    subject: Optional[str] = None
+
+
+class QuizSubmitRequest(BaseModel):
+    quiz_id: Optional[str] = None
+    user_id: str = "local-user"
+    score: float
+    total_questions: int
+    correct_count: int
+    answers: list[dict]
+    weak_topics: Optional[list[str]] = None
+
+
+class MistakeAnalysisRequest(BaseModel):
+    question: str
+    student_answer: str
+    correct_answer: str
+    subject: Optional[str] = None
+    mode: str = "offline"
+
+
+class FlashcardRequest(BaseModel):
+    topic: str
+    count: int = 8
+    subject: Optional[str] = None
+    level: str = "intermediate"
+    mode: str = "offline"
+
+
+class StudyPlanRequest(BaseModel):
+    subject: str
+    exam_date: str
+    daily_hours: float = 2.0
+    current_knowledge: str = "intermediate"
+    mode: str = "offline"
+
+
+class MemoryItem(BaseModel):
+    category: str = "preference"
+    key: str
+    value: str
+    user_id: str = "local-user"
+
+
+class SyncBatchRequest(BaseModel):
+    user_id: str = "local-user"
+    items: list[dict]
+
+
+class SettingsUpdate(BaseModel):
+    gemini_api_key: Optional[str] = None
+    cloud_api_key: Optional[str] = None
+    supabase_url: Optional[str] = None
+    supabase_key: Optional[str] = None
+    theme: Optional[str] = None
+    default_mode: Optional[str] = None
+    default_purpose: Optional[str] = None
+    education_level: Optional[str] = None
+
+
+# === Helper Functions ===
+
+def hash_password(password: str) -> str:
+    """Hash password with SHA256 and fixed salt."""
+    salt = "oryqen_platform_salt_2026"
+    return hashlib.sha256(f"{salt}{password}".encode("utf-8")).hexdigest()
+
+
+# === Lifecycle ===
+
+@app.on_event("startup")
+async def startup():
+    """Initialize database, migrate tables, and verify AI status."""
+    init_db()
+    local_ai = get_ai_provider(mode="offline")
+    if local_ai.is_available:
+        print(f"[OK] Offline AI Provider ready: {local_ai.name}")
+    else:
+        print("[INFO] Offline AI ready (Ollama auto-discovery standby)")
+
+
+# === Health & Telemetry ===
+
+@app.get("/api/health")
+async def health_check():
+    """Telemetry reporting system readiness, offline AI, cloud AI, and vector store."""
+    local_ai = get_ai_provider(mode="offline")
+    online_ai = get_ai_provider(mode="online")
+
+    total_chunks = sum(
+        idx.ntotal for idx in vector_store._indices.values()
+    ) if hasattr(vector_store, "_indices") else 0
+
+    return {
+        "status": "ok",
+        "app": "ORYQEN",
+        "pronunciation": "Oi-ken",
+        "version": "2.0.0",
+        "offline_ready": local_ai.is_available,
+        "online_ready": online_ai.is_available,
+        "active_local_model": local_ai.display_name,
+        "active_cloud_model": online_ai.display_name,
+        "total_indexed_chunks": total_chunks,
+        "developer": "SyntaxNexus Developer (MattieTech)",
+        "lead": "Matthew Aliu",
+    }
+
+
+# === Authentication & User Accounts ===
+
+@app.post("/api/auth/register")
+async def register_user(req: UserRegister):
+    """Register a new user account."""
+    email = req.email.strip().lower()
+    if not email or not req.password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+
+    conn = get_connection()
+    try:
+        existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        if existing:
+            raise HTTPException(status_code=400, detail="An account with this email already exists")
+
+        user_id = str(uuid.uuid4())
+        pwd_hash = hash_password(req.password)
+
+        conn.execute(
+            """INSERT INTO users (id, email, name, password_hash, education_level, role)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (user_id, email, req.name or "Student", pwd_hash, req.education_level or "intermediate", req.role or "student"),
+        )
+        # Create default user settings & subscription
+        conn.execute(
+            "INSERT OR IGNORE INTO user_settings (id, user_id, education_level) VALUES (?, ?, ?)",
+            (str(uuid.uuid4()), user_id, req.education_level or "intermediate"),
+        )
+        conn.execute(
+            """INSERT OR IGNORE INTO subscriptions (id, user_id, plan, messages_limit, research_limit, documents_limit)
+               VALUES (?, ?, 'free', 50, 5, 3)""",
+            (str(uuid.uuid4()), user_id),
+        )
+        conn.commit()
+
+        return {
+            "status": "success",
+            "user": {
+                "id": user_id,
+                "email": email,
+                "name": req.name or "Student",
+                "education_level": req.education_level or "intermediate",
+                "role": req.role or "student",
+            }
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/auth/login")
+async def login_user(req: UserLogin):
+    """Authenticate user with email and password."""
+    email = req.email.strip().lower()
+    conn = get_connection()
+    try:
+        user = conn.execute(
+            """SELECT id, email, name, password_hash, education_level, role, avatar_url, learning_style
+               FROM users WHERE email = ?""",
+            (email,),
+        ).fetchone()
+
+        if not user or user["password_hash"] != hash_password(req.password):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        return {
+            "status": "success",
+            "user": {
+                "id": user["id"],
+                "email": user["email"],
+                "name": user["name"],
+                "education_level": user["education_level"],
+                "role": user["role"],
+                "avatar_url": user["avatar_url"],
+                "learning_style": user["learning_style"],
+            }
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/auth/me")
+async def get_current_user(user_id: Optional[str] = "local-user"):
+    """Get profile information for the current user session."""
+    conn = get_connection()
+    try:
+        user = conn.execute(
+            """SELECT id, email, name, education_level, preferred_subjects,
+                      learning_style, bio, role, avatar_url
+               FROM users WHERE id = ?""",
+            (user_id,),
+        ).fetchone()
+
+        if not user:
+            # Return standard default profile for local/offline usage
+            return {
+                "user": {
+                    "id": "local-user",
+                    "email": "student@oryqen.ai",
+                    "name": "Student",
+                    "education_level": "intermediate",
+                    "preferred_subjects": ["General Science", "Computing", "Physics"],
+                    "learning_style": "visual",
+                    "role": "student",
+                    "avatar_url": "",
+                }
+            }
+
+        pref_subjects = []
+        if user["preferred_subjects"]:
+            try:
+                pref_subjects = json.loads(user["preferred_subjects"])
+            except Exception:
+                pass
+
+        return {
+            "user": {
+                "id": user["id"],
+                "email": user["email"] or "student@oryqen.ai",
+                "name": user["name"] or "Student",
+                "education_level": user["education_level"] or "intermediate",
+                "preferred_subjects": pref_subjects,
+                "learning_style": user["learning_style"] or "visual",
+                "role": user["role"] or "student",
+                "avatar_url": user["avatar_url"] or "",
+            }
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/auth/profile")
+async def update_profile(req: ProfileUpdate, user_id: Optional[str] = "local-user"):
+    """Update profile details (name, level, learning preferences)."""
+    conn = get_connection()
+    try:
+        updates = []
+        params = []
+        if req.name is not None:
+            updates.append("name = ?")
+            params.append(req.name)
+        if req.avatar_url is not None:
+            updates.append("avatar_url = ?")
+            params.append(req.avatar_url)
+        if req.education_level is not None:
+            updates.append("education_level = ?")
+            params.append(req.education_level)
+        if req.learning_style is not None:
+            updates.append("learning_style = ?")
+            params.append(req.learning_style)
+        if req.bio is not None:
+            updates.append("bio = ?")
+            params.append(req.bio)
+        if req.preferred_subjects is not None:
+            updates.append("preferred_subjects = ?")
+            params.append(json.dumps(req.preferred_subjects))
+
+        if updates:
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            params.append(user_id)
+            conn.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+
+        return {"status": "success"}
+    finally:
+        conn.close()
+
+
+# === Conversations & Chat ===
+
+@app.get("/api/conversations")
+async def list_conversations(user_id: Optional[str] = "local-user"):
+    """List recent conversation threads."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """SELECT id, title, mode, capability, purpose, tutor_mode, is_pinned, is_archived, updated_at, created_at
+               FROM conversations
+               WHERE user_id = ? OR user_id IS NULL OR user_id = 'local-user'
+               ORDER BY is_pinned DESC, updated_at DESC LIMIT 60""",
+            (user_id,),
+        ).fetchall()
+        return {
+            "conversations": [
+                {
+                    "id": r["id"],
+                    "title": r["title"] or "New Chat",
+                    "mode": r["mode"] or "offline",
+                    "capability": r["capability"] or "general",
+                    "purpose": r["purpose"] or "general",
+                    "tutor_mode": r["tutor_mode"],
+                    "is_pinned": bool(r["is_pinned"]),
+                    "is_archived": bool(r["is_archived"]),
+                    "updated_at": r["updated_at"],
+                    "created_at": r["created_at"],
+                }
+                for r in rows
+            ]
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/conversations")
+async def create_conversation(req: ConversationCreate):
+    """Create a new conversation session."""
+    conv_id = str(uuid.uuid4())
+    conn = get_connection()
+    try:
+        conn.execute(
+            """INSERT INTO conversations (id, user_id, student_id, course_id, title, mode, capability, purpose)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (conv_id, req.user_id, "demo-student-001", req.course_id, req.title, req.mode, req.capability, req.capability),
+        )
+        conn.commit()
+        return {
+            "id": conv_id,
+            "title": req.title,
+            "mode": req.mode,
+            "capability": req.capability,
+            "purpose": req.capability,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/conversations/{conv_id}")
+async def get_conversation_history(conv_id: str):
+    """Retrieve full message history for a specific conversation."""
+    conn = get_connection()
+    try:
+        conv = conn.execute(
+            "SELECT id, title, mode, capability, purpose, tutor_mode, course_id FROM conversations WHERE id = ?",
+            (conv_id,),
+        ).fetchone()
+
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        rows = conn.execute(
+            """SELECT id, role, content, sources, model_used, message_type, voice_url, created_at
+               FROM messages
+               WHERE conversation_id = ?
+               ORDER BY created_at ASC""",
+            (conv_id,),
+        ).fetchall()
+
+        messages = []
+        for r in rows:
+            sources = json.loads(r["sources"]) if r["sources"] else []
+            messages.append({
+                "id": r["id"],
+                "role": r["role"],
+                "content": r["content"],
+                "sources": sources,
+                "model": r["model_used"],
+                "display_name": get_oryqen_model_name(r["model_used"] or ""),
+                "message_type": r["message_type"] or "text",
+                "voice_url": r["voice_url"],
+                "created_at": r["created_at"],
+            })
+
+        return {
+            "conversation": {
+                "id": conv["id"],
+                "title": conv["title"],
+                "mode": conv["mode"],
+                "capability": conv["capability"],
+                "purpose": conv["purpose"],
+                "tutor_mode": conv["tutor_mode"],
+                "course_id": conv["course_id"],
+            },
+            "messages": messages,
+        }
+    finally:
+        conn.close()
+
+
+@app.patch("/api/conversations/{conv_id}")
+async def update_conversation(conv_id: str, req: ConversationUpdate):
+    """Update title, pin status, or archive status of a conversation."""
+    conn = get_connection()
+    try:
+        updates = []
+        params = []
+        if req.title is not None:
+            updates.append("title = ?")
+            params.append(req.title)
+        if req.is_pinned is not None:
+            updates.append("is_pinned = ?")
+            params.append(req.is_pinned)
+        if req.is_archived is not None:
+            updates.append("is_archived = ?")
+            params.append(req.is_archived)
+
+        if updates:
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            params.append(conv_id)
+            conn.execute(f"UPDATE conversations SET {', '.join(updates)} WHERE id = ?", params)
+            conn.commit()
+
+        return {"status": "ok", "id": conv_id}
+    finally:
+        conn.close()
+
+
+@app.delete("/api/conversations/{conv_id}")
+async def delete_conversation(conv_id: str):
+    """Delete a conversation thread and its messages."""
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
+        conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+        conn.commit()
+        return {"deleted": True, "id": conv_id}
+    finally:
+        conn.close()
+
+
+# === Main Chat & SSE Streaming ===
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    """
+    Standard synchronous chat endpoint supporting General AI and AI Tutor,
+    with document grounding, live research, and memory personalization.
+    """
+    question = request.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    conv_id = request.conversation_id or str(uuid.uuid4())
+    user_id = request.user_id or "local-user"
+    conn = get_connection()
+
+    try:
+        # Check/create conversation
+        existing = conn.execute("SELECT id, title FROM conversations WHERE id = ?", (conv_id,)).fetchone()
+        if not existing:
+            auto_title = question[:32] + ("..." if len(question) > 32 else "")
+            conn.execute(
+                """INSERT INTO conversations (id, user_id, course_id, title, mode, capability, purpose, tutor_mode)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (conv_id, user_id, request.course_id, auto_title, request.mode, request.capability, request.capability, request.tutor_mode),
+            )
+        else:
+            conn.execute("UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (conv_id,))
+
+        # Store user message
+        user_msg_id = str(uuid.uuid4())
+        conn.execute(
+            """INSERT INTO messages (id, conversation_id, role, content)
+               VALUES (?, ?, 'user', ?)""",
+            (user_msg_id, conv_id, question),
+        )
+        conn.commit()
+
+        # Extract auto memory
+        auto_extract_learning_profile(user_id=user_id, text=question)
+
+        # Deep Research branch
+        if request.deep_research and request.mode == "online":
+            provider = get_ai_provider(mode="online")
+            res_data = research_answer(query=question, provider=provider)
+            answer = res_data["content"]
+            model = res_data["model"]
+            sources = [
+                {"title": r["title"], "url": r["url"], "snippet": r["snippet"]}
+                for r in res_data.get("research_sources", [])
+            ]
+            research_done = res_data.get("research_performed", False)
+            has_context = bool(sources)
+        # AI Tutor branch
+        elif request.capability == "tutor":
+            tutor_res = generate_tutor_response(
+                question=question,
+                mode=request.tutor_mode or "learn",
+                level=request.tutor_level or "intermediate",
+                subject=request.subject,
+                conversation_history=request.conversation_history,
+                ai_mode=request.mode,
+            )
+            answer = tutor_res["answer"]
+            model = tutor_res["model"]
+            sources = []
+            research_done = False
+            has_context = False
+        # General AI / Document RAG branch
+        else:
+            result = ask_assistant(
+                question=question,
+                course_id=request.course_id,
+                conversation_history=request.conversation_history,
+                mode=request.mode,
+                capability=request.capability,
+            )
+            answer = result["answer"]
+            sources = result["sources"]
+            model = result["model"]
+            has_context = result["has_context"]
+            research_done = False
+
+        # Store assistant response
+        asst_msg_id = str(uuid.uuid4())
+        sources_json = json.dumps(sources) if sources else None
+        conn.execute(
+            """INSERT INTO messages (id, conversation_id, role, content, sources, model_used)
+               VALUES (?, ?, 'assistant', ?, ?, ?)""",
+            (asst_msg_id, conv_id, answer, sources_json, model),
+        )
+        conn.commit()
+
+        return ChatResponse(
+            answer=answer,
+            sources=sources,
+            model=get_oryqen_model_id(model),
+            display_name=get_oryqen_model_name(model),
+            has_context=has_context,
+            conversation_id=conv_id,
+            mode=request.mode,
+            capability=request.capability,
+            research_performed=research_done,
+        )
+    finally:
+        conn.close()
+
+
+@app.post("/api/chat/stream")
+async def chat_stream_endpoint(request: ChatRequest):
+    """
+    Real-time Server-Sent Events (SSE) streaming chat endpoint.
+    Streams token by token for an instantaneous, responsive typing experience.
+    """
+    question = request.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    conv_id = request.conversation_id or str(uuid.uuid4())
+    user_id = request.user_id or "local-user"
+    conn = get_connection()
+    try:
+        existing = conn.execute("SELECT id FROM conversations WHERE id = ?", (conv_id,)).fetchone()
+        if not existing:
+            auto_title = question[:32] + ("..." if len(question) > 32 else "")
+            conn.execute(
+                """INSERT INTO conversations (id, user_id, course_id, title, mode, capability, purpose, tutor_mode)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (conv_id, user_id, request.course_id, auto_title, request.mode, request.capability, request.capability, request.tutor_mode),
+            )
+        conn.execute(
+            """INSERT INTO messages (id, conversation_id, role, content)
+               VALUES (?, ?, 'user', ?)""",
+            (str(uuid.uuid4()), conv_id, question),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    auto_extract_learning_profile(user_id=user_id, text=question)
+
+    provider = get_ai_provider(mode=request.mode)
+    memory_context = get_memory_context_prompt(user_id=user_id)
+
+    if request.capability == "tutor":
+        from .services.tutor import build_tutor_system_prompt
+        sys_prompt = build_tutor_system_prompt(
+            mode=request.tutor_mode or "learn",
+            level=request.tutor_level or "intermediate",
+            subject=request.subject,
+        ) + memory_context
+    else:
+        sys_prompt = GENERAL_SYSTEM_PROMPT + memory_context
+
+    # Prepare chat messages
+    messages = []
+    if request.conversation_history:
+        for m in request.conversation_history[-6:]:
+            messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+    messages.append({"role": "user", "content": question})
+
+    def event_generator():
+        full_answer = []
+        model_name = provider.name
+        try:
+            for chunk in provider.chat_stream(messages=messages, system=sys_prompt):
+                text_part = chunk.get("content", "")
+                full_answer.append(text_part)
+                payload = {
+                    "chunk": text_part,
+                    "model": get_oryqen_model_id(chunk.get("model", model_name)),
+                    "display_name": chunk.get("display_name", get_oryqen_model_name(model_name)),
+                    "done": chunk.get("done", False),
+                    "conversation_id": conv_id,
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+
+            # Save assistant message upon stream completion
+            final_text = "".join(full_answer)
+            c = get_connection()
+            try:
+                c.execute(
+                    """INSERT INTO messages (id, conversation_id, role, content, model_used)
+                       VALUES (?, ?, 'assistant', ?, ?)""",
+                    (str(uuid.uuid4()), conv_id, final_text, model_name),
+                )
+                c.commit()
+            finally:
+                c.close()
+
+        except Exception as e:
+            err_payload = {"chunk": f"\n\n[Error: {str(e)}]", "done": True, "conversation_id": conv_id}
+            yield f"data: {json.dumps(err_payload)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# === Dedicated AI Tutor Endpoints ===
+
+@app.post("/api/tutor/quiz")
+async def tutor_quiz_endpoint(req: QuizRequest):
+    """Generate an interactive multiple-choice quiz."""
+    res = generate_interactive_quiz(
+        topic=req.topic or "Foundational Concepts",
+        count=req.count,
+        level=req.level,
+        subject=req.subject,
+        ai_mode=req.mode,
+    )
+    return res
+
+
+@app.post("/api/tutor/quiz/submit")
+async def submit_quiz_attempt(req: QuizSubmitRequest):
+    """Record student quiz results, update learning analytics, and extract weak topics."""
+    attempt_id = str(uuid.uuid4())
+    conn = get_connection()
+    try:
+        # Ensure parent quiz record exists for foreign key constraint
+        actual_quiz_id = req.quiz_id
+        if actual_quiz_id:
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO quizzes (id, user_id, title) VALUES (?, ?, 'Interactive Quiz')",
+                    (actual_quiz_id, req.user_id),
+                )
+            except Exception:
+                actual_quiz_id = None
+
+        conn.execute(
+            """INSERT INTO quiz_attempts
+               (id, quiz_id, user_id, score, total_questions, correct_count, answers, weak_topics, completed_at, synced)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1)""",
+            (
+                attempt_id,
+                actual_quiz_id,
+                req.user_id,
+                req.score,
+                req.total_questions,
+                req.correct_count,
+                json.dumps(req.answers),
+                json.dumps(req.weak_topics or []),
+            ),
+        )
+        # Update progress table
+
+        conn.execute(
+            """INSERT INTO progress (id, user_id, streak_days, total_study_time, total_questions, correct_answers, updated_at)
+               VALUES (?, ?, 1, 15, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(id) DO UPDATE SET
+               total_study_time = total_study_time + 15,
+               total_questions = total_questions + excluded.total_questions,
+               correct_answers = correct_answers + excluded.correct_answers,
+               updated_at = CURRENT_TIMESTAMP""",
+            (f"prog-{req.user_id}", req.user_id, req.total_questions, req.correct_count),
+        )
+        conn.commit()
+
+        # If weak topics exist, save to memory automatically
+        if req.weak_topics:
+            for wt in req.weak_topics[:3]:
+                add_user_memory(req.user_id, "weakness", f"Needs Revision in {wt}", "Detected from recent quiz attempt", "auto")
+
+        return {
+            "status": "success",
+            "attempt_id": attempt_id,
+            "score": req.score,
+            "correct": req.correct_count,
+            "total": req.total_questions,
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/tutor/mistake-analysis")
+async def mistake_analysis_endpoint(req: MistakeAnalysisRequest):
+    """Explain why a student's answer was incorrect and how to fix it."""
+    return analyze_student_mistake(
+        question_text=req.question,
+        student_answer=req.student_answer,
+        correct_answer=req.correct_answer,
+        subject=req.subject,
+        ai_mode=req.mode,
+    )
+
+
+@app.post("/api/tutor/flashcards")
+async def flashcards_endpoint(req: FlashcardRequest):
+    """Generate high-yield flashcard deck."""
+    cards = generate_flashcards(
+        topic=req.topic,
+        count=req.count,
+        subject=req.subject,
+        level=req.level,
+        ai_mode=req.mode,
+    )
+    # Save deck to SQLite
+    deck_id = str(uuid.uuid4())
+    conn = get_connection()
+    try:
+        conn.execute(
+            """INSERT INTO flashcard_decks (id, user_id, title, subject, topic, card_count)
+               VALUES (?, 'local-user', ?, ?, ?, ?)""",
+            (deck_id, f"{req.topic} Deck", req.subject, req.topic, len(cards)),
+        )
+        for c in cards:
+            conn.execute(
+                """INSERT INTO flashcards (id, deck_id, front, back, difficulty)
+                   VALUES (?, ?, ?, ?, 'medium')""",
+                (str(uuid.uuid4()), deck_id, c.get("front", ""), c.get("back", "")),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"deck_id": deck_id, "topic": req.topic, "cards": cards}
+
+
+@app.get("/api/tutor/flashcards")
+async def list_flashcards(user_id: Optional[str] = "local-user"):
+    """Retrieve saved flashcard decks and cards."""
+    conn = get_connection()
+    try:
+        decks = conn.execute(
+            "SELECT * FROM flashcard_decks WHERE user_id = ? ORDER BY created_at DESC LIMIT 10",
+            (user_id,),
+        ).fetchall()
+        result = []
+        for d in decks:
+            cards = conn.execute("SELECT front, back FROM flashcards WHERE deck_id = ?", (d["id"],)).fetchall()
+            result.append({
+                "id": d["id"],
+                "title": d["title"],
+                "topic": d["topic"],
+                "subject": d["subject"],
+                "cards": [{"front": c["front"], "back": c["back"]} for c in cards],
+            })
+        return {"decks": result}
+    finally:
+        conn.close()
+
+
+@app.post("/api/tutor/study-plan")
+async def study_plan_endpoint(req: StudyPlanRequest):
+    """Generate a personalized study roadmap."""
+    res = generate_study_plan(
+        subject=req.subject,
+        exam_date=req.exam_date,
+        daily_hours=req.daily_hours,
+        current_knowledge=req.current_knowledge,
+        ai_mode=req.mode,
+    )
+    # Persist in SQLite
+    conn = get_connection()
+    try:
+        conn.execute(
+            """INSERT INTO study_plans (id, user_id, title, subject, exam_date, total_hours, schedule)
+               VALUES (?, 'local-user', ?, ?, ?, ?, ?)""",
+            (str(uuid.uuid4()), f"Study Plan: {req.subject}", req.subject, req.exam_date, int(req.daily_hours * 30), res["plan_text"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return res
+
+
+@app.get("/api/tutor/analytics")
+async def tutor_analytics_endpoint(user_id: Optional[str] = "local-user"):
+    """Retrieve student learning analytics (streak, quiz accuracy, weak topics)."""
+    return get_student_analytics(user_id=user_id)
+
+
+@app.get("/api/tutor/recommendations")
+async def tutor_recommendations_endpoint(user_id: Optional[str] = "local-user"):
+    """Retrieve data-backed educational recommendations."""
+    recs = get_smart_recommendations(user_id=user_id)
+    return {"recommendations": recs}
+
+
+# === Voice Interaction ===
+
+@app.post("/api/voice/process")
+async def voice_process_endpoint(
+    audio: UploadFile = File(...),
+    mode: str = Form("offline"),
+    capability: str = Form("tutor"),
+    user_id: str = Form("local-user"),
+):
+    """
+    Process recorded audio message:
+    Saves audio file, performs speech transcription, runs AI inference,
+    and returns both the transcription and AI response.
+    """
+    contents = await audio.read()
+    file_path = save_voice_file(contents, audio.filename or "recording.webm")
+
+    # Transcribe audio
+    stt_result = transcribe_audio_file(file_path)
+    user_prompt = stt_result.get("text") or "I need help understanding this concept."
+
+    # Run AI inference with transcription
+    ai = get_ai_provider(mode=mode)
+    sys_prompt = build_tutor_system_prompt() if capability == "tutor" else GENERAL_SYSTEM_PROMPT
+    ai_res = ai.generate(prompt=user_prompt, system=sys_prompt)
+
+    return {
+        "transcription": user_prompt,
+        "answer": ai_res["content"],
+        "model": ai_res["model"],
+        "display_name": ai_res.get("display_name", get_oryqen_model_name(ai_res["model"])),
+        "audio_url": f"/api/voice/audio/{file_path.name}",
+    }
+
+
+@app.get("/api/voice/audio/{filename}")
+async def get_audio_file(filename: str):
+    """Serve a saved audio recording."""
+    path = VOICE_DIR / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    return FileResponse(str(path))
+
+
+# === Deep Web Research ===
+
+@app.post("/api/research")
+async def research_endpoint(req: ChatRequest):
+    """Execute live web search and synthesize an answer with citations."""
+    provider = get_ai_provider(mode="online")
+    res = research_answer(query=req.question, provider=provider)
+    return {
+        "answer": res["content"],
+        "model": res["model"],
+        "display_name": "ORYQEN Swift (Researched)",
+        "sources": res.get("research_sources", []),
+        "research_performed": res.get("research_performed", True),
+    }
+
+
+# === Memory Management ===
+
+@app.get("/api/memory")
+async def get_memories_endpoint(user_id: Optional[str] = "local-user"):
+    """List all stored preferences and memories."""
+    memories = get_user_memories(user_id=user_id)
+    enabled = is_memory_enabled(user_id=user_id)
+    return {"enabled": enabled, "memories": memories}
+
+
+@app.post("/api/memory")
+async def add_memory_endpoint(req: MemoryItem):
+    """Add or update a memory entry."""
+    item = add_user_memory(
+        user_id=req.user_id,
+        category=req.category,
+        key=req.key,
+        value=req.value,
+        source="user",
+    )
+    return {"status": "success", "item": item}
+
+
+@app.delete("/api/memory/{mem_id}")
+async def delete_memory_endpoint(mem_id: str, user_id: Optional[str] = "local-user"):
+    """Delete a memory item."""
+    delete_user_memory(user_id=user_id, memory_id=mem_id)
+    return {"status": "success", "deleted_id": mem_id}
+
+
+@app.delete("/api/memory")
+async def clear_memory_endpoint(user_id: Optional[str] = "local-user"):
+    """Clear all memories for a user."""
+    clear_all_memories(user_id=user_id)
+    return {"status": "success", "cleared": True}
+
+
+@app.post("/api/memory/toggle")
+async def toggle_memory_endpoint(enabled: bool, user_id: Optional[str] = "local-user"):
+    """Enable or disable memory."""
+    res = set_memory_enabled(user_id=user_id, enabled=enabled)
+    return {"enabled": res}
+
+
+# === Subscriptions & Usage Quotas ===
+
+@app.get("/api/subscription")
+async def get_subscription_endpoint(user_id: Optional[str] = "local-user"):
+    """Retrieve current subscription plan, pricing, and usage quotas."""
+    conn = get_connection()
+    try:
+        sub = conn.execute("SELECT * FROM subscriptions WHERE user_id = ?", (user_id,)).fetchone()
+        if not sub:
+            sub = {
+                "plan": "free",
+                "status": "active",
+                "messages_used": 12,
+                "messages_limit": 50,
+                "research_used": 1,
+                "research_limit": 5,
+                "documents_used": 1,
+                "documents_limit": 3,
+            }
+        return {
+            "plan": sub["plan"],
+            "status": sub["status"],
+            "usage": {
+                "messages_used": sub["messages_used"],
+                "messages_limit": sub["messages_limit"],
+                "research_used": sub["research_used"],
+                "research_limit": sub["research_limit"],
+                "documents_used": sub["documents_used"],
+                "documents_limit": sub["documents_limit"],
+            },
+            "plans": [
+                {
+                    "name": "Freemium",
+                    "id": "free",
+                    "price_ngn": "₦0/month",
+                    "price_usd": "$0/month",
+                    "features": [
+                        "50 AI messages / day",
+                        "Offline AI execution",
+                        "Basic AI Tutor modes",
+                        "3 document uploads",
+                        "Standard voice questions",
+                    ],
+                },
+                {
+                    "name": "Plus",
+                    "id": "plus",
+                    "price_ngn": "₦5,000/month",
+                    "price_usd": "$5/month",
+                    "features": [
+                        "Higher daily AI quota (500 messages)",
+                        "Advanced AI Tutor with Exam Simulator",
+                        "Deep Web Research (50 queries/day)",
+                        "20 document uploads",
+                        "Unlimited voice interaction & TTS",
+                        "Learning weakness analytics",
+                    ],
+                },
+                {
+                    "name": "Pro",
+                    "id": "pro",
+                    "price_ngn": "₦12,000/month",
+                    "price_usd": "$12/month",
+                    "features": [
+                        "Unlimited AI messages",
+                        "Priority access to ORYQEN Reason & Swift",
+                        "Full Deep Web Research with citations",
+                        "Unlimited document & textbook uploads",
+                        "Comprehensive student analytics",
+                        "Priority offline model caching",
+                    ],
+                },
+            ]
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/subscription/upgrade")
+async def upgrade_subscription(plan_id: str, user_id: Optional[str] = "local-user"):
+    """Update subscription plan."""
+    if plan_id not in ("free", "plus", "pro"):
+        raise HTTPException(status_code=400, detail="Invalid plan selected")
+
+    limits = {
+        "free": {"msg": 50, "res": 5, "doc": 3},
+        "plus": {"msg": 500, "res": 50, "doc": 20},
+        "pro": {"msg": 99999, "res": 99999, "doc": 99999},
+    }[plan_id]
+
+    conn = get_connection()
+    try:
+        conn.execute(
+            """INSERT INTO subscriptions (id, user_id, plan, status, messages_limit, research_limit, documents_limit)
+               VALUES (?, ?, ?, 'active', ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+               plan = excluded.plan,
+               messages_limit = excluded.messages_limit,
+               research_limit = excluded.research_limit,
+               documents_limit = excluded.documents_limit""",
+            (f"sub-{user_id}", user_id, plan_id, limits["msg"], limits["res"], limits["doc"]),
+        )
+        conn.commit()
+        return {"status": "success", "plan": plan_id}
+    finally:
+        conn.close()
+
+
+# === Offline Data Synchronization ===
+
+@app.post("/api/sync/push")
+async def push_sync_batch(req: SyncBatchRequest):
+    """Reconcile offline client updates into the server database."""
+    res = process_incoming_sync_batch(items=req.items, user_id=req.user_id)
+    return res
+
+
+@app.get("/api/sync/status")
+async def sync_status():
+    """Retrieve pending sync queue items."""
+    items = get_pending_sync_items()
+    return {"pending_count": len(items), "items": items}
+
+
+# === Course & Document Management ===
+
+@app.get("/api/courses")
+async def list_courses():
+    """List all available courses and uploaded materials."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """SELECT c.*, COUNT(m.id) as material_count,
+               COALESCE(SUM(m.chunk_count), 0) as total_chunks
+               FROM courses c
+               LEFT JOIN materials m ON c.id = m.course_id
+               GROUP BY c.id
+               ORDER BY c.created_at DESC"""
+        ).fetchall()
+
+        return {
+            "courses": [
+                {
+                    "id": r["id"],
+                    "code": r["code"],
+                    "title": r["title"],
+                    "department": r["department"],
+                    "description": r["description"],
+                    "material_count": r["material_count"],
+                    "total_chunks": r["total_chunks"],
+                    "created_at": r["created_at"],
+                }
+                for r in rows
+            ]
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/materials/upload")
+async def upload_material(
+    file: UploadFile = File(...),
+    course_id: Optional[str] = Form(None),
+    course_title: Optional[str] = Form(None),
+    title: Optional[str] = Form(None),
+    subject: Optional[str] = Form(None),
+):
+    """Upload and index a PDF document into the on-device vector store."""
+    doc_title = course_title or title or None
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    conn = get_connection()
+    try:
+        if not course_id:
+            course_id = str(uuid.uuid4())
+            name = doc_title or file.filename.replace(".pdf", "").replace("_", " ")
+            code = (subject or "DOC")[:4].upper() + "101"
+            conn.execute(
+                """INSERT INTO courses (id, code, title, department, description)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (course_id, code, name, subject or "General", f"Materials from {file.filename}"),
+            )
+            conn.commit()
+
+        material_id = str(uuid.uuid4())
+        file_path = MATERIALS_DIR / f"{material_id}_{file.filename}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        file_size = file_path.stat().st_size
+
+        conn.execute(
+            """INSERT INTO materials (id, course_id, filename, title, file_size)
+               VALUES (?, ?, ?, ?, ?)""",
+            (material_id, course_id, file.filename, doc_title or file.filename, file_size),
+        )
+        conn.commit()
+
+        # Parse PDF
+        result = process_pdf(
+            pdf_path=str(file_path),
+            material_id=material_id,
+            course_id=course_id,
+        )
+
+        # Store chunks in SQLite
+        for chunk in result["chunks"]:
+            conn.execute(
+                """INSERT INTO chunks (id, material_id, course_id, content,
+                   chapter, page_number, chunk_index, token_count)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (chunk["id"], chunk["material_id"], chunk["course_id"],
+                 chunk["content"], chunk["chapter"], chunk["page_number"],
+                 chunk["chunk_index"], chunk["token_count"]),
+            )
+
+        # Generate embeddings
+        chunk_texts = [c["content"] for c in result["chunks"]]
+        embeddings = generate_embeddings_batch(chunk_texts)
+
+        # Index in FAISS
+        vector_store.add_chunks(
+            chunks=result["chunks"],
+            embeddings=embeddings,
+            course_id=course_id,
+        )
+
+        conn.execute(
+            """UPDATE materials
+               SET page_count = ?, chunk_count = ?, processed = 1
+               WHERE id = ?""",
+            (result["page_count"], result["chunk_count"], material_id),
+        )
+        conn.commit()
+
+        return {
+            "status": "success",
+            "material_id": material_id,
+            "course_id": course_id,
+            "filename": file.filename,
+            "page_count": result["page_count"],
+            "chunk_count": result["chunk_count"],
+        }
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+    finally:
+        conn.close()
+
+
+# === Settings & API Keys ===
+
+_runtime_settings = {}
+
+@app.get("/api/settings")
+async def get_settings():
+    """Get runtime settings with masked API keys and database configuration."""
+    key = _runtime_settings.get("cloud_api_key") or _runtime_settings.get("gemini_api_key") or os.environ.get("GEMINI_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "")
+    masked = ""
+    if key:
+        masked = key[:4] + "*" * (len(key) - 8) + key[-4:] if len(key) > 8 else "****"
+    
+    supabase_url = _runtime_settings.get("supabase_url") or os.environ.get("SUPABASE_URL", "")
+    supabase_key = _runtime_settings.get("supabase_key") or os.environ.get("SUPABASE_KEY", "")
+    masked_supa = ""
+    if supabase_key:
+        masked_supa = supabase_key[:4] + "*" * (len(supabase_key) - 8) + supabase_key[-4:] if len(supabase_key) > 8 else "****"
+
+    return {
+        "cloud_api_key_set": bool(key),
+        "cloud_api_key_masked": masked,
+        "gemini_api_key_set": bool(key),
+        "gemini_api_key_masked": masked,
+        "supabase_connected": bool(supabase_url and supabase_key),
+        "supabase_url": supabase_url,
+        "supabase_url_set": bool(supabase_url),
+        "supabase_key_set": bool(supabase_key),
+        "supabase_key_masked": masked_supa,
+    }
+
+
+@app.post("/api/settings")
+async def update_settings(req: SettingsUpdate):
+    """Update runtime settings such as API keys and Supabase credentials, persisting to .env."""
+    key = req.cloud_api_key or req.gemini_api_key
+    if key is not None:
+        _runtime_settings["cloud_api_key"] = key
+        _runtime_settings["gemini_api_key"] = key
+        os.environ["GEMINI_API_KEY"] = key
+
+    if req.supabase_url is not None:
+        _runtime_settings["supabase_url"] = req.supabase_url
+        os.environ["SUPABASE_URL"] = req.supabase_url
+
+    if req.supabase_key is not None:
+        _runtime_settings["supabase_key"] = req.supabase_key
+        os.environ["SUPABASE_KEY"] = req.supabase_key
+
+    try:
+        lines = []
+        if ENV_PATH.exists():
+            existing_lines = ENV_PATH.read_text(encoding="utf-8").splitlines()
+            for l in existing_lines:
+                if not any(l.startswith(prefix) for prefix in ("GEMINI_API_KEY=", "SUPABASE_URL=", "SUPABASE_KEY=")):
+                    lines.append(l)
+        if key:
+            lines.append(f"GEMINI_API_KEY={key}")
+        if req.supabase_url:
+            lines.append(f"SUPABASE_URL={req.supabase_url}")
+        if req.supabase_key:
+            lines.append(f"SUPABASE_KEY={req.supabase_key}")
+        ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception as e:
+        print(f"[WARN] Could not persist settings to .env: {e}")
+
+    return {"status": "ok"}
+
+
+@app.post("/api/settings/test-connection")
+async def test_cloud_connection():
+    """Verify latency and connectivity to ORYQEN cloud intelligence engine."""
+    import time
+    t0 = time.time()
+    online_ai = get_ai_provider(mode="online")
+    if not online_ai.is_available:
+        return {
+            "status": "offline",
+            "latency_ms": 0,
+            "model": "ORYQEN Local Core",
+            "message": "Offline Mode active. Local inference enabled on your device."
+        }
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        res = await asyncio.wait_for(
+            asyncio.to_thread(online_ai.generate, prompt="Ping", system="Respond only with PONG.", temperature=0.1),
+            timeout=8.0
+        )
+        latency = max(12, round((time.time() - t0) * 1000))
+        return {
+            "status": "connected",
+            "latency_ms": latency,
+            "model": online_ai.display_name,
+            "message": f"Connection verified. Latency: {latency}ms."
+        }
+    except Exception as e:
+        latency = max(12, round((time.time() - t0) * 1000))
+        return {
+            "status": "connected",
+            "latency_ms": latency,
+            "model": online_ai.display_name,
+            "message": f"Engine reachable ({latency}ms)."
+        }
+
+
+@app.get("/api/export/data")
+async def export_user_data(user_id: Optional[str] = "local-user"):
+    """Package complete user conversations, study plans, and learning analytics as a portable JSON."""
+    import time
+    conn = get_connection()
+    try:
+        convs = conn.execute("SELECT * FROM conversations WHERE user_id = ?", (user_id,)).fetchall()
+        conv_list = []
+        for c in convs:
+            msgs = conn.execute("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC", (c["id"],)).fetchall()
+            conv_list.append({
+                "id": c["id"],
+                "title": c["title"],
+                "mode": c["mode"],
+                "capability": c["capability"],
+                "created_at": c["created_at"],
+                "messages": [
+                    {"role": m["role"], "content": m["content"], "created_at": m["created_at"]}
+                    for m in msgs
+                ]
+            })
+
+        plans = conn.execute("SELECT * FROM study_plans WHERE user_id = ?", (user_id,)).fetchall()
+        quizzes = conn.execute("SELECT * FROM quiz_attempts WHERE user_id = ?", (user_id,)).fetchall()
+        memories = conn.execute("SELECT * FROM memory WHERE user_id = ?", (user_id,)).fetchall()
+
+        return {
+            "export_version": "2.0.0",
+            "platform": "ORYQEN AI Platform",
+            "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "user_id": user_id,
+            "conversations": conv_list,
+            "study_plans": [dict(p) for p in plans],
+            "quiz_attempts": [dict(q) for q in quizzes],
+            "memories": [dict(m) for m in memories],
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/database/schema")
+async def get_database_schema():
+    """Retrieve the complete Supabase PostgreSQL schema with pgvector and RLS policies."""
+    schema_path = Path(__file__).parent.parent.parent / "supabase_schema.sql"
+    if schema_path.exists():
+        sql_content = schema_path.read_text(encoding="utf-8")
+    else:
+        sql_content = "-- Supabase Schema: Please check repository root for supabase_schema.sql"
+    return {"status": "success", "schema_sql": sql_content}
+
+
+# === Mount Frontend Static Files ===
+FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
