@@ -396,36 +396,53 @@ function setupTutorControls() {
 function setTutorMode(mode) {
   state.tutorMode = mode;
   const input = document.getElementById('chatInput');
+  const modeLabels = {
+    learn: 'Step-by-Step Learning',
+    practice: 'Practice Questions',
+    quiz: 'Multiple-Choice Assessment',
+    exam: 'Exam Simulation',
+    flashcard: '3D Flashcards',
+    explain: 'Feynman Intuitive Explanation',
+    socratic: 'Socratic Dialogue',
+    mistake_analysis: 'Diagnostic Mistake Analysis',
+    study_plan: 'Structured Study Roadmap',
+    revision: 'High-Yield Revision & Formulas',
+  };
+  const label = modeLabels[mode] || mode.replace('_', ' ');
   if (input) {
-    input.placeholder = `Ask ORYQEN Tutor (${mode.replace('_', ' ')} mode)...`;
+    input.placeholder = `Ask ORYQEN Tutor (${label})...`;
   }
-  showToast(`Tutor mode: ${mode.toUpperCase().replace('_', ' ')}`);
-
-  // If flashcard mode, open generator prompt
-  if (mode === 'flashcard' && state.messages.length === 0) {
-    handleTutorAction('flashcard', 'Core Concepts in Physics');
-  } else if (mode === 'quiz' && state.messages.length === 0) {
-    handleTutorAction('quiz', 'Foundational Physics Principles');
-  }
+  showToast(`Mode: ${label}`);
 }
 
 async function handleTutorAction(action, defaultTopic = 'Core Subject Matter') {
+  const topic = defaultTopic || 'Fundamental Principles';
   if (action === 'quiz') {
-    const topic = prompt('Enter the quiz topic:', defaultTopic) || defaultTopic;
     startQuiz(topic, 5, false);
   } else if (action === 'exam') {
-    const topic = prompt('Enter the examination subject/topic:', defaultTopic) || defaultTopic;
     startQuiz(topic, 8, true);
   } else if (action === 'flashcard') {
-    const topic = prompt('Enter the flashcard topic:', defaultTopic) || defaultTopic;
     startFlashcards(topic);
   } else if (action === 'study_plan') {
-    const topic = prompt('Enter the study plan subject/topic:', defaultTopic) || defaultTopic;
-    const examDate = prompt('Enter your target exam date (e.g., 2026-06-15):', '2026-06-15') || '2026-06-15';
-    generateStudyPlanPrompt(topic, examDate);
+    generateStudyPlanPrompt(topic, '2026-06-15');
   } else if (action === 'socratic') {
-    document.getElementById('chatInput').value = `Guide me using the Socratic method to understand: ${defaultTopic}`;
-    submitUserMessage();
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+      chatInput.value = `Guide me using the Socratic method to understand: ${topic}`;
+      submitUserMessage();
+    }
+  } else if (action === 'mistake_analysis') {
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+      chatInput.value = `Perform a diagnostic mistake analysis on: ${topic}. Break down common misconceptions and the correct method.`;
+      submitUserMessage();
+    }
+  } else if (action === 'revision') {
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+      chatInput.value = `Provide a rapid high-yield revision summary with key formulas and definitions for: ${topic}`;
+      submitUserMessage();
+    }
   }
 }
 
@@ -704,15 +721,20 @@ async function startFlashcards(topic) {
 }
 
 function renderFlashcard(index) {
-  const card = state.flashcards.cards[index];
+  if (!state.flashcards.cards || state.flashcards.cards.length === 0) return;
+  state.flashcards.currentIndex = Math.max(0, Math.min(index, state.flashcards.cards.length - 1));
+  const card = state.flashcards.cards[state.flashcards.currentIndex];
   const total = state.flashcards.cards.length;
 
-  document.getElementById('flashcardCounter').textContent = `Card ${index + 1} of ${total}`;
-  document.getElementById('flashcardFrontText').textContent = card.front;
-  document.getElementById('flashcardBackText').textContent = card.back;
+  const counter = document.getElementById('flashcardCounter');
+  const front = document.getElementById('flashcardFrontText');
+  const back = document.getElementById('flashcardBackText');
+  if (counter) counter.textContent = `Card ${state.flashcards.currentIndex + 1} of ${total}`;
+  if (front) front.textContent = card.front || 'Question / Term';
+  if (back) back.textContent = card.back || 'Explanation / Answer';
 
   const cardElement = document.getElementById('flashcardCard');
-  cardElement.classList.remove('flipped');
+  if (cardElement) cardElement.classList.remove('flipped');
   state.flashcards.isFlipped = false;
 }
 
@@ -1067,9 +1089,12 @@ async function submitUserMessage(overrideQuery) {
     input.style.height = 'auto';
   }
 
-  // Thinking indicator
+  // Thinking indicator with dynamic status message
   const thinkingId = 'thinking-' + Date.now();
-  appendThinkingRow(thinkingId);
+  const thinkingLabel = state.workspace === 'tutor'
+    ? `ORYQEN Tutor is formulating ${state.tutorMode.replace('_', ' ')} lesson...`
+    : (state.mode === 'online' ? 'ORYQEN Swift is generating response...' : 'ORYQEN Local Core is computing on-device...');
+  appendThinkingRow(thinkingId, thinkingLabel);
   scrollToBottom();
 
   setGeneratingState(true);
@@ -1098,8 +1123,6 @@ async function submitUserMessage(overrideQuery) {
       signal: state.abortController.signal,
     });
 
-    removeElement(thinkingId);
-
     if (res.ok && res.body) {
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
@@ -1127,12 +1150,12 @@ async function submitUserMessage(overrideQuery) {
               }
 
               if (data.chunk) {
-                fullContent += data.chunk;
-                modelUsed = data.display_name || data.model || 'ORYQEN';
-
                 if (!assistantBubble) {
-                  assistantBubble = createStreamingAssistantRow(modelUsed);
+                  removeElement(thinkingId);
+                  assistantBubble = createStreamingAssistantRow(modelUsed || data.display_name || data.model);
                 }
+                fullContent += data.chunk;
+                modelUsed = data.display_name || data.model || modelUsed || 'ORYQEN';
                 updateStreamingAssistantRow(assistantBubble, fullContent);
                 scrollToBottom();
               }
@@ -1141,6 +1164,7 @@ async function submitUserMessage(overrideQuery) {
         }
       }
 
+      removeElement(thinkingId);
       state.messages.push({ role: 'assistant', content: fullContent, model: modelUsed });
     } else {
       // Synchronous fallback
@@ -1150,6 +1174,7 @@ async function submitUserMessage(overrideQuery) {
         body: JSON.stringify(payload),
       });
       const data = await fallbackRes.json();
+      removeElement(thinkingId);
       if (data.conversation_id && !state.currentConversationId) {
         state.currentConversationId = data.conversation_id;
         localStorage.setItem('oryqen_current_conv_id', state.currentConversationId);
@@ -1320,31 +1345,38 @@ function updateStreamingAssistantRow(bubbleElement, rawText) {
   }
 }
 
-function appendThinkingRow(id) {
+function appendThinkingRow(id, labelText) {
   const row = document.createElement('div');
-  row.className = 'message-row assistant';
+  row.className = 'message-row assistant thinking-row';
   row.id = id;
 
+  const displayLabel = labelText || (
+    state.workspace === 'tutor'
+      ? `ORYQEN Tutor is formulating ${state.tutorMode.replace('_', ' ')} lesson...`
+      : (state.mode === 'online' ? 'ORYQEN Swift is generating response...' : 'ORYQEN Local Core is computing on-device...')
+  );
+
   row.innerHTML = `
-    <div class="message-avatar">
-      <svg class="anim-orbit" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="9"></circle>
-        <path d="M12 3a9 9 0 0 1 9 9"></path>
-        <circle cx="12" cy="12" r="3"></circle>
-      </svg>
+    <div class="message-avatar thinking-avatar">
+      <div class="thinking-spinner"></div>
     </div>
     <div class="message-content-wrap">
-      <div class="message-bubble">
-        <div class="typing-dots">
-          <span class="typing-dot"></span>
-          <span class="typing-dot"></span>
-          <span class="typing-dot"></span>
+      <div class="message-bubble thinking-bubble">
+        <div class="thinking-state-box">
+          <span class="thinking-pulse-dot"></span>
+          <span class="thinking-label">${escapeHtml(displayLabel)}</span>
+          <div class="typing-wave">
+            <span class="wave-dot"></span>
+            <span class="wave-dot"></span>
+            <span class="wave-dot"></span>
+          </div>
         </div>
       </div>
     </div>
   `;
 
   document.getElementById('chatMessages').appendChild(row);
+  scrollToBottom();
 }
 
 function removeElement(id) {
@@ -1354,7 +1386,9 @@ function removeElement(id) {
 
 function scrollToBottom() {
   const vp = document.getElementById('chatViewport');
-  if (vp) vp.scrollTop = vp.scrollHeight;
+  if (vp) {
+    vp.scrollTo({ top: vp.scrollHeight, behavior: 'smooth' });
+  }
 }
 
 function startNewChat() {
@@ -1650,9 +1684,17 @@ function renderConversationsList() {
   state.conversations.forEach(c => {
     const btn = document.createElement('button');
     btn.className = `conv-item-btn ${state.currentConversationId === c.id ? 'active' : ''}`;
+    const isTutor = (c.capability === 'tutor' || c.purpose === 'tutor');
+    const modeTag = isTutor
+      ? `<span class="conv-mode-tag tutor">${escapeHtml(c.tutor_mode || 'tutor')}</span>`
+      : `<span class="conv-mode-tag general">General</span>`;
+
     btn.innerHTML = `
-      <span class="conv-title-text">${escapeHtml(c.title || 'Session')}</span>
-      <span class="conv-delete-btn" title="Delete">&times;</span>
+      <div class="conv-item-content">
+        ${modeTag}
+        <span class="conv-title-text">${escapeHtml(c.title || 'Session')}</span>
+      </div>
+      <span class="conv-delete-btn" title="Delete conversation">&times;</span>
     `;
 
     btn.addEventListener('click', (e) => {
@@ -1679,10 +1721,26 @@ async function openConversation(convId) {
     document.getElementById('welcomeGeneralScreen')?.classList.add('hidden');
     document.getElementById('welcomeTutorScreen')?.classList.add('hidden');
 
-    document.getElementById('currentChatTitle').textContent = data.conversation.title || 'ORYQEN';
-    state.messages = [];
+    const conv = data.conversation;
+    if (conv) {
+      document.getElementById('currentChatTitle').textContent = conv.title || 'ORYQEN';
+      if (conv.capability === 'tutor' || conv.purpose === 'tutor') {
+        setWorkspace('tutor');
+        if (conv.tutor_mode) {
+          setTutorMode(conv.tutor_mode);
+          document.querySelectorAll('.tutor-mode-chip').forEach(chip => {
+            chip.classList.toggle('active', chip.dataset.tutorMode === conv.tutor_mode);
+          });
+        }
+      } else {
+        setWorkspace('general');
+      }
+    } else {
+      document.getElementById('currentChatTitle').textContent = 'ORYQEN';
+    }
 
-    data.messages.forEach(m => {
+    state.messages = [];
+    (data.messages || []).forEach(m => {
       appendMessageRow(m);
       state.messages.push(m);
     });
@@ -3067,14 +3125,29 @@ function setupKeyboardShortcuts() {
       e.preventDefault();
       startNewChat();
     }
+    // Admin Portal Secure Shortcut: Ctrl+Shift+A or Cmd+Shift+A
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+      e.preventDefault();
+      document.getElementById('adminLoginModal')?.classList.remove('hidden');
+    }
     if (e.key === 'Escape') {
-      ['docsModal', 'settingsModal', 'citationModal', 'quizModal', 'flashcardModal', 'studentDashboardModal', 'memoryModal', 'subscriptionModal', 'authModal'].forEach(id => {
+      ['docsModal', 'settingsModal', 'citationModal', 'quizModal', 'flashcardModal', 'studentDashboardModal', 'memoryModal', 'subscriptionModal', 'authModal', 'adminLoginModal', 'adminModal'].forEach(id => {
         document.getElementById(id)?.classList.add('hidden');
       });
     }
     if (e.code === 'Space' && !document.getElementById('flashcardModal')?.classList.contains('hidden')) {
       e.preventDefault();
       flipCurrentCard();
+    }
+  });
+
+  // Secure Admin Hash route (#admin)
+  if (window.location.hash === '#admin') {
+    document.getElementById('adminLoginModal')?.classList.remove('hidden');
+  }
+  window.addEventListener('hashchange', () => {
+    if (window.location.hash === '#admin') {
+      document.getElementById('adminLoginModal')?.classList.remove('hidden');
     }
   });
 }

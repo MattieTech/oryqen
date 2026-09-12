@@ -14,13 +14,22 @@ powershell -NoProfile -Command "try { $res = Invoke-RestMethod -Uri 'http://127.
 if "%ERRORLEVEL%"=="0" (
     echo   [OK] Ollama daemon is active and responding.
 ) else (
-    echo   [INFO] Starting Ollama daemon...
-    if exist "%LOCALAPPDATA%\Programs\Ollama\ollama.exe" (
-        start "" "%LOCALAPPDATA%\Programs\Ollama\ollama.exe" serve
+    echo   [INFO] Starting Ollama local AI daemon...
+    if exist "%LOCALAPPDATA%\Programs\Ollama\ollama app.exe" (
+        start "" "%LOCALAPPDATA%\Programs\Ollama\ollama app.exe"
+    ) else if exist "%LOCALAPPDATA%\Programs\Ollama\ollama.exe" (
+        start "" /B "%LOCALAPPDATA%\Programs\Ollama\ollama.exe" serve >nul 2>&1
     ) else (
-        start "" ollama serve
+        start "" /B ollama serve >nul 2>&1
     )
-    timeout /t 3 /nobreak >nul
+    REM Wait up to 6 seconds for daemon initialization
+    for /L %%i in (1,1,6) do (
+        powershell -NoProfile -Command "try { $res = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 1; exit 0 } catch { exit 1 }" >nul 2>&1
+        if "%ERRORLEVEL%"=="0" goto ollama_ready
+        timeout /t 1 /nobreak >nul
+    )
+    :ollama_ready
+    echo   [OK] Ollama daemon is active and ready.
 )
 
 echo.

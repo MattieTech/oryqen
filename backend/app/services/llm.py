@@ -16,7 +16,6 @@ from typing import Optional, Generator, List, Dict, Any
 import socket
 import httpx
 
-from .offline_ai import synthesize_offline_response
 
 # Load .env if present
 try:
@@ -212,31 +211,46 @@ def ensure_ollama_active() -> bool:
     """Check if Ollama is responsive, and attempt auto-launch if needed."""
     if is_ollama_port_open():
         return True
-    ollama_bin = shutil.which("ollama")
-    if not ollama_bin:
-        local_app = os.environ.get("LOCALAPPDATA", "")
-        if local_app:
-            candidate = os.path.join(local_app, "Programs", "Ollama", "ollama.exe")
-            if os.path.exists(candidate):
-                ollama_bin = candidate
+    
+    local_app = os.environ.get("LOCALAPPDATA", "")
+    ollama_app = os.path.join(local_app, "Programs", "Ollama", "ollama app.exe") if local_app else ""
+    ollama_bin = os.path.join(local_app, "Programs", "Ollama", "ollama.exe") if local_app else ""
+    if not os.path.exists(ollama_bin):
+        ollama_bin = shutil.which("ollama") or ""
 
-    if ollama_bin and os.path.exists(ollama_bin):
+    env = os.environ.copy()
+    env["OLLAMA_HOST"] = "127.0.0.1:11434"
+    
+    # Priority 1: Launch ollama app.exe if present
+    if ollama_app and os.path.exists(ollama_app):
         try:
-            env = os.environ.copy()
-            env["OLLAMA_HOST"] = "127.0.0.1:11434"
-            subprocess.Popen(
-                [ollama_bin, "serve"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=env,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            for _ in range(8):
+            flags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            subprocess.Popen([ollama_app], env=env, creationflags=flags)
+            for _ in range(12):
                 time.sleep(0.5)
                 if is_ollama_port_open():
                     return True
         except Exception:
             pass
+
+    # Priority 2: Launch ollama serve directly
+    if ollama_bin and os.path.exists(ollama_bin):
+        try:
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            subprocess.Popen(
+                [ollama_bin, "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=env,
+                creationflags=flags,
+            )
+            for _ in range(12):
+                time.sleep(0.5)
+                if is_ollama_port_open():
+                    return True
+        except Exception:
+            pass
+            
     return is_ollama_port_open()
 
 
@@ -347,7 +361,7 @@ class LocalAIProvider(AIProvider):
             response = ollama.chat(
                 model=self.model,
                 messages=messages,
-                options={"temperature": temperature, "num_ctx": 4096},
+                options={"temperature": temperature, "num_ctx": 2048},
             )
             return {
                 "content": response.message.content,
@@ -391,7 +405,7 @@ class LocalAIProvider(AIProvider):
             stream_resp = ollama.chat(
                 model=self.model,
                 messages=messages,
-                options={"temperature": temperature, "num_ctx": 4096},
+                options={"temperature": temperature, "num_ctx": 2048},
                 stream=True,
             )
             for chunk in stream_resp:
@@ -439,7 +453,7 @@ class LocalAIProvider(AIProvider):
             response = ollama.chat(
                 model=self.model,
                 messages=chat_messages,
-                options={"temperature": temperature, "num_ctx": 4096},
+                options={"temperature": temperature, "num_ctx": 2048},
             )
             return {
                 "content": response.message.content,
@@ -483,7 +497,7 @@ class LocalAIProvider(AIProvider):
             stream_resp = ollama.chat(
                 model=self.model,
                 messages=chat_messages,
-                options={"temperature": temperature, "num_ctx": 4096},
+                options={"temperature": temperature, "num_ctx": 2048},
                 stream=True,
             )
             for chunk in stream_resp:
@@ -530,7 +544,7 @@ CLOUD_CANDIDATE_MODELS = [
 
 
 def call_openrouter_api(messages: list[dict], system: str = "", temperature: float = 0.7) -> Optional[str]:
-    """Call OpenRouter as secondary failover provider."""
+    """Call OpenRouter as secondary failover provider with strict token bounds."""
     api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not api_key or api_key.startswith("test-"):
         return None
@@ -547,14 +561,19 @@ def call_openrouter_api(messages: list[dict], system: str = "", temperature: flo
     for m in messages:
         payload_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
 
-    candidates = [model, "meta-llama/llama-3.3-70b-instruct", "anthropic/claude-3.5-haiku", "openai/gpt-4o-mini"]
+    candidates = [model, "google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat"]
     for c in candidates:
         try:
             with httpx.Client(timeout=35.0) as client:
                 res = client.post(
                     "https://openrouter.ai/api/v1/chat/completions",
                     headers=headers,
-                    json={"model": c, "messages": payload_messages, "temperature": temperature},
+                    json={
+                        "model": c,
+                        "messages": payload_messages,
+                        "temperature": temperature,
+                        "max_tokens": 2048,
+                    },
                 )
                 if res.status_code == 200:
                     choices = res.json().get("choices", [])
@@ -565,6 +584,70 @@ def call_openrouter_api(messages: list[dict], system: str = "", temperature: flo
         except Exception:
             continue
     return None
+
+
+def stream_openrouter_api(messages: list[dict], system: str = "", temperature: float = 0.7) -> Generator:
+    """Stream response directly from OpenRouter token-by-token."""
+    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not api_key or api_key.startswith("test-"):
+        return
+    model = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-flash").strip()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "https://oryqen.ai",
+        "X-Title": "ORYQEN AI",
+        "Content-Type": "application/json",
+    }
+    payload_messages = []
+    if system:
+        payload_messages.append({"role": "system", "content": system})
+    for m in messages:
+        payload_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+
+    candidates = [model, "meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat"]
+    for c in candidates:
+        try:
+            with httpx.Client(timeout=45.0) as client:
+                with client.stream(
+                    "POST",
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json={
+                        "model": c,
+                        "messages": payload_messages,
+                        "temperature": temperature,
+                        "max_tokens": 2048,
+                        "stream": True,
+                    }
+                ) as response:
+                    if response.status_code != 200:
+                        continue
+                    has_yielded = False
+                    for line in response.iter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                chunk_json = json.loads(data_str)
+                                delta = chunk_json.get("choices", [{}])[0].get("delta", {})
+                                token = delta.get("content", "")
+                                if token:
+                                    has_yielded = True
+                                    yield {
+                                        "content": token,
+                                        "chunk": token,
+                                        "token": token,
+                                        "model": "oryqen-swift",
+                                        "display_name": "ORYQEN Swift",
+                                        "done": False,
+                                    }
+                            except Exception:
+                                pass
+                    if has_yielded:
+                        return
+        except Exception:
+            continue
 
 
 def call_openai_api(messages: list[dict], system: str = "", temperature: float = 0.7) -> Optional[str]:
@@ -588,7 +671,7 @@ def call_openai_api(messages: list[dict], system: str = "", temperature: float =
             res = client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers=headers,
-                json={"model": model, "messages": payload_messages, "temperature": temperature},
+                json={"model": model, "messages": payload_messages, "temperature": temperature, "max_tokens": 2048},
             )
             if res.status_code == 200:
                 choices = res.json().get("choices", [])
@@ -602,7 +685,7 @@ def call_openai_api(messages: list[dict], system: str = "", temperature: float =
 
 
 class CloudAIProvider(AIProvider):
-    """Cloud AI provider with multi-tiered failover (Gemini -> OpenRouter -> OpenAI -> Local Core)."""
+    """Cloud AI provider with multi-tiered neural failover (Gemini -> OpenRouter -> OpenAI -> Local Core)."""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
@@ -626,7 +709,7 @@ class CloudAIProvider(AIProvider):
     def _build_gemini_payload(self, contents: list, system: str = "", temperature: float = 0.7) -> dict:
         payload = {
             "contents": contents,
-            "generationConfig": {"temperature": temperature}
+            "generationConfig": {"temperature": temperature, "maxOutputTokens": 2048}
         }
         if system:
             payload["system_instruction"] = {"parts": [{"text": system}]}
@@ -636,9 +719,9 @@ class CloudAIProvider(AIProvider):
         """
         Execute inference across the resilient multi-provider failover chain:
         Tier 1: Google Gemini API
-        Tier 2: OpenRouter API
+        Tier 2: OpenRouter API (Live Streaming)
         Tier 3: OpenAI API
-        Tier 4: ORYQEN Local Cognitive Engine
+        Tier 4: Genuine Local On-Device Neural Model (Ollama qwen2.5)
         """
         user_prompt = ""
         user_messages = []
@@ -679,13 +762,56 @@ class CloudAIProvider(AIProvider):
                 "done": True,
             }
 
-        # --- Tier 1: Gemini API ---
+        # --- STREAMING EXECUTION PATH ---
+        if stream:
+            def live_stream_generator():
+                # 1. Try OpenRouter live streaming
+                openrouter_yielded = False
+                for token_data in stream_openrouter_api(user_messages, system=system):
+                    openrouter_yielded = True
+                    yield token_data
+                if openrouter_yielded:
+                    return
+
+                # 2. Try Local Model streaming if available
+                local_prov = LocalAIProvider()
+                if local_prov.is_available:
+                    for token_data in local_prov.chat_stream(user_messages, system=system):
+                        yield token_data
+                    return
+
+                # 3. Honest error if all connections fail
+                err_msg = (
+                    "⚠️ **Connection Interrupted**\n\n"
+                    "Unable to stream response from Cloud AI (OpenRouter/Gemini), and no local neural model is active.\n\n"
+                    "- Please check your internet connection.\n"
+                    "- Or start Ollama locally via `start_oryqen.bat` to enable 100% offline inference."
+                )
+                for w in err_msg.split(" "):
+                    yield {
+                        "content": w + " ",
+                        "chunk": w + " ",
+                        "token": w + " ",
+                        "model": "oryqen-swift",
+                        "display_name": "ORYQEN Swift",
+                        "done": False,
+                    }
+
+            return live_stream_generator()
+
+        # --- SYNCHRONOUS EXECUTION PATH ---
+        # 1. Try OpenRouter API
+        openrouter_res = call_openrouter_api(user_messages, system=system)
+        if openrouter_res:
+            return create_response(openrouter_res, "ORYQEN Swift")
+
+        # 2. Try Gemini API
         if self.api_key and not self.api_key.startswith("test-"):
             headers = {"Content-Type": "application/json"}
             for model in CLOUD_CANDIDATE_MODELS:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
                 try:
-                    with httpx.Client(timeout=35.0) as client:
+                    with httpx.Client(timeout=25.0) as client:
                         res = client.post(url, headers=headers, json=payload)
                         if res.status_code == 200:
                             data = res.json()
@@ -697,19 +823,24 @@ class CloudAIProvider(AIProvider):
                 except Exception:
                     continue
 
-        # --- Tier 2: OpenRouter API Fallback ---
-        openrouter_res = call_openrouter_api(user_messages, system=system)
-        if openrouter_res:
-            return create_response(openrouter_res, "ORYQEN Swift")
-
-        # --- Tier 3: OpenAI API Fallback ---
+        # 3. Try OpenAI API
         openai_res = call_openai_api(user_messages, system=system)
         if openai_res:
             return create_response(openai_res, "ORYQEN Swift")
 
-        # --- Tier 4: ORYQEN Embedded Intelligence Engine ---
-        fallback_body = synthesize_offline_response(user_prompt or "Academic inquiry")
-        return create_response(fallback_body, "ORYQEN Core")
+        # 4. Try Local Neural Model
+        local_prov = LocalAIProvider()
+        if local_prov.is_available:
+            local_res = local_prov.chat(user_messages, system=system)
+            return create_response(local_res.get("content", ""), "ORYQEN Local Core")
+
+        # 5. Honest Error
+        return create_response(
+            "⚠️ **Connection Interrupted**\n\n"
+            "Unable to reach Cloud AI services, and no local neural model was found active on this machine.\n"
+            "Please check your internet connection or run `start_oryqen.bat` to launch the on-device AI.",
+            "ORYQEN Standby"
+        )
 
     def generate(self, prompt: str, system: str = "", temperature: float = 0.7) -> dict:
         contents = [{"role": "user", "parts": [{"text": prompt}]}]
