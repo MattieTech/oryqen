@@ -430,11 +430,13 @@
                 <span class="wave-bar"></span>
                 <span class="wave-bar"></span>
               </div>
+              <div class="voice-live-transcript" id="voiceLiveTranscript" title="Real-time speech detection" style="font-size: 0.82rem; color: var(--text-secondary); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: italic;">Listening...</div>
               <button type="button" class="btn-sm btn-secondary" id="stopRecordingBtn">Stop Recording</button>
             </div>
 
             <div class="voice-preview-state hidden" id="voicePreviewState">
               <audio id="voiceAudioPreview" controls class="voice-audio-element"></audio>
+              <div class="voice-transcript-review" id="voiceTranscriptReview" style="font-size:0.82rem; color:var(--text-primary); max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 8px; font-weight:500;"></div>
               <div class="voice-preview-actions">
                 <button type="button" class="btn-sm btn-ghost text-danger" id="discardVoiceBtn" title="Discard recording">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -1163,24 +1165,60 @@
             </div>
           </div>
 
-          <!-- Tab 3: Cloud Intelligence -->
+          <!-- Tab 3: Cloud Intelligence & Multi-Tier Failover -->
           <div class="settings-tab-pane" id="pane-cloud">
             <div class="settings-section">
-              <div class="settings-section-title">Universal Cloud License & API Key</div>
-              <p class="settings-help">ORYQEN Cloud Gateway connects directly to enterprise neural intelligence clusters. Enter your key to unlock unlimited high-speed inference.</p>
+              <div class="settings-section-title">Cloud Intelligence & Multi-Tier Failover Architecture</div>
+              <p class="settings-help">ORYQEN operates with an automatic 4-tier failover engine. If the primary cloud engine reaches quota limits or rate limits, traffic automatically and seamlessly shifts to your backup engines, ensuring zero downtime.</p>
+
+              <!-- Tier 1: Primary Cloud Engine -->
               <div class="settings-field">
-                <label class="settings-label" for="apiKeyInput">Cloud License / API Key</label>
+                <div class="field-label-row">
+                  <label class="settings-label" for="apiKeyInput">Primary Cloud Key (Google Gemini)</label>
+                  <span class="badge badge-accent">Tier 1 Primary</span>
+                </div>
                 <div class="pwd-input-wrap">
-                  <input type="password" id="apiKeyInput" class="settings-input" placeholder="Enter ORYQEN Cloud Key / AI License" autocomplete="off">
+                  <input type="password" id="apiKeyInput" class="settings-input" placeholder="AIzaSy... (Gemini API Key)" autocomplete="off">
                   <button type="button" class="pwd-eye-btn" id="apiKeyEyeToggle" title="Toggle visibility">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                   </button>
                 </div>
+                <div class="settings-key-status" id="apiKeyStatus" style="margin-top:4px; font-size:12px;"></div>
               </div>
 
-              <div class="connection-action-row">
+              <!-- Tier 2: OpenRouter Backup Failover -->
+              <div class="settings-field">
+                <div class="field-label-row">
+                  <label class="settings-label" for="openrouterKeyInput">Backup Engine 1 (OpenRouter Key)</label>
+                  <span class="badge badge-blue">Tier 2 Failover</span>
+                </div>
+                <div class="pwd-input-wrap">
+                  <input type="password" id="openrouterKeyInput" class="settings-input" placeholder="sk-or-v1-... (OpenRouter API Key)" autocomplete="off">
+                  <button type="button" class="pwd-eye-btn" id="openrouterKeyEyeToggle" title="Toggle visibility">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  </button>
+                </div>
+                <div class="settings-key-status" id="openrouterKeyStatus" style="margin-top:4px; font-size:12px;"></div>
+              </div>
+
+              <!-- Tier 3: OpenAI Secondary Backup -->
+              <div class="settings-field">
+                <div class="field-label-row">
+                  <label class="settings-label" for="openaiKeyInput">Backup Engine 2 (OpenAI Key)</label>
+                  <span class="badge badge-secondary">Tier 3 Failover</span>
+                </div>
+                <div class="pwd-input-wrap">
+                  <input type="password" id="openaiKeyInput" class="settings-input" placeholder="sk-proj-... (OpenAI API Key)" autocomplete="off">
+                  <button type="button" class="pwd-eye-btn" id="openaiKeyEyeToggle" title="Toggle visibility">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  </button>
+                </div>
+                <div class="settings-key-status" id="openaiKeyStatus" style="margin-top:4px; font-size:12px;"></div>
+              </div>
+
+              <div class="connection-action-row" style="margin-top: 14px;">
                 <button type="button" class="btn btn-primary" id="saveApiKeyBtn">
-                  <span>Save Key</span>
+                  <span>Save All Keys</span>
                 </button>
                 <button type="button" class="btn btn-secondary" id="testCloudPingBtn">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
@@ -1191,8 +1229,6 @@
                   <span class="status-msg">Checking...</span>
                 </div>
               </div>
-
-              <div class="settings-key-status" id="apiKeyStatus"></div>
             </div>
           </div>
 

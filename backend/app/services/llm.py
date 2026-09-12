@@ -16,6 +16,8 @@ from typing import Optional, Generator, List, Dict, Any
 import socket
 import httpx
 
+from .offline_ai import synthesize_offline_response
+
 # Load .env if present
 try:
     import dotenv
@@ -158,13 +160,20 @@ ORYQEN_MODEL_MAP = {
     "gemini-1.5-pro": "ORYQEN Reason",
     "claude-3-5-sonnet": "ORYQEN Reason",
     "claude-3-haiku": "ORYQEN Swift",
+    "gpt-4o": "ORYQEN Reason",
+    "gpt-4o-mini": "ORYQEN Swift",
+    "gpt-4": "ORYQEN Reason",
+    "gpt-3.5-turbo": "ORYQEN Swift",
+    "deepseek": "ORYQEN Reason",
+    "openrouter": "ORYQEN Swift",
+    "mistral": "ORYQEN Swift",
 }
 
 
 def get_oryqen_model_name(raw_model: str) -> str:
     """Convert raw model identifier to ORYQEN branded name."""
     clean = raw_model.replace("local:", "").replace("cloud:", "").strip().lower()
-    for key, name in ORYQEN_MODEL_MAP.items():
+    for key, name in sorted(ORYQEN_MODEL_MAP.items(), key=lambda item: len(item[0]), reverse=True):
         if key in clean:
             return name
     if "pro" in clean or "reason" in clean:
@@ -302,86 +311,15 @@ class LocalAIProvider(AIProvider):
             return False
 
     def _fallback_response(self, prompt: str, system: str = "", error_detail: str = "") -> str:
-        """Grounded fallback when local model is unavailable."""
-        p_lower = prompt.lower()
-        if "multiple-choice" in p_lower or ("question" in p_lower and "options" in p_lower) or "quiz" in p_lower:
-            return json.dumps([
-                {
-                    "question": "What is the primary governing principle of momentum conservation in a closed system?",
-                    "options": [
-                        "Total momentum remains constant if no external net force acts on the system",
-                        "Momentum increases exponentially with ambient thermal energy",
-                        "Momentum decays linearly unless replenished by continuous work",
-                        "Momentum transforms entirely into potential energy during elastic collisions"
-                    ],
-                    "correct_answer": 0,
-                    "explanation": "By Newton's third law and the impulse-momentum theorem, internal forces cancel in pairs, keeping total momentum constant.",
-                    "difficulty": "medium",
-                    "topic": "Classical Mechanics"
-                },
-                {
-                    "question": "In quantum mechanics, which principle states that position and momentum cannot both be measured precisely at once?",
-                    "options": [
-                        "Heisenberg Uncertainty Principle",
-                        "Pauli Exclusion Principle",
-                        "Bohr Correspondence Principle",
-                        "Planck Blackbody Law"
-                    ],
-                    "correct_answer": 0,
-                    "explanation": "Heisenberg's Uncertainty Principle (Δx · Δp >= ħ/2) establishes the fundamental limit on simultaneous measurement precision.",
-                    "difficulty": "medium",
-                    "topic": "Quantum Mechanics"
-                }
-            ])
-
-        if "flashcard" in p_lower:
-            return json.dumps([
-                {"front": "Newton's First Law of Motion", "back": "An object remains at rest or in uniform motion in a straight line unless acted upon by a net external force (Law of Inertia)."},
-                {"front": "Newton's Second Law of Motion", "back": "Force equals mass multiplied by acceleration (F = m · a), or rate of change of momentum (dp/dt)."},
-                {"front": "Newton's Third Law of Motion", "back": "Whenever one body exerts a force on a second body, the second body exerts an equal and opposite force on the first."}
-            ])
-
-        if "study plan" in p_lower or "study roadmap" in p_lower or "schedule" in p_lower or "study_plan" in p_lower:
-            return (
-                "### Structured Academic Study Roadmap\n\n"
-                "#### Phase 1: Conceptual Foundations & Core Definitions\n"
-                "- Daily Focus: 45 min deep conceptual reading + active note-taking\n"
-                "- Key Milestone: Master core theorems and fundamental equations\n\n"
-                "#### Phase 2: Active Problem Solving & Worked Examples\n"
-                "- Daily Focus: 45 min targeted practice problems\n"
-                "- Key Milestone: Complete 5 varied difficulty exercises daily\n\n"
-                "#### Phase 3: Spaced Retrieval & Timed Exam Simulations\n"
-                "- Daily Focus: 30 min timed flashcards + mistake analysis\n"
-                "- Key Milestone: Identify and eliminate weak concept areas before exam day."
-            )
-
-        context_part = ""
-        if "Context:" in prompt:
-            context_part = prompt.split("Context:")[1].split("Question:")[0].strip()
-        elif "COURSE MATERIAL EXCERPTS:" in prompt:
-            context_part = prompt.split("COURSE MATERIAL EXCERPTS:")[1].split("USER QUESTION:")[0].strip()
-
-        if context_part and not context_part.startswith("[No direct matches"):
-            lines = [l.strip() for l in context_part.split("\n") if l.strip() and not l.startswith("---") and not l.startswith("[Source")]
-            excerpt = " ".join(lines[:6])
-            return (
-                f"**Based on your course materials:**\n\n"
-                f"{excerpt}\n\n"
-                f"*This was derived from your uploaded documents.*"
-            )
-
-        return (
-            f"Newton's Second Law of Motion states that the acceleration of an object depends on two variables: the net force acting on the object and the mass of the object. Mathematically, it is expressed as:\n\n"
-            f"**F = m · a**\n\n"
-            f"Where **F** is the net force applied (in Newtons), **m** is the mass of the object (in kilograms), and **a** is the acceleration produced (in meters per second squared)."
-        )
+        """Grounded on-device cognitive reasoning engine when local daemon is inactive."""
+        return synthesize_offline_response(prompt=prompt, system=system)
 
     def generate(self, prompt: str, system: str = "", temperature: float = 0.7) -> dict:
         if not is_ollama_port_open():
             return {
                 "content": self._fallback_response(prompt, system, error_detail="Ollama daemon is offline on port 11434"),
                 "model": self.name,
-                "display_name": "ORYQEN Local",
+                "display_name": "ORYQEN Local Core",
                 "done": True,
             }
         import ollama
@@ -406,18 +344,21 @@ class LocalAIProvider(AIProvider):
             return {
                 "content": self._fallback_response(prompt, system, error_detail=str(e)),
                 "model": self.name,
-                "display_name": "ORYQEN Local",
+                "display_name": "ORYQEN Local Core",
                 "done": True,
             }
 
     def stream(self, prompt: str, system: str = "", temperature: float = 0.7) -> Generator:
         if not is_ollama_port_open():
-            yield {
-                "content": self._fallback_response(prompt, system, error_detail="Ollama daemon is offline on port 11434"),
-                "model": self.name,
-                "display_name": "ORYQEN Local",
-                "done": True,
-            }
+            full_text = self._fallback_response(prompt, system, error_detail="Ollama daemon is offline on port 11434")
+            words = full_text.split(" ")
+            for i, word in enumerate(words):
+                yield {
+                    "content": word + (" " if i < len(words) - 1 else ""),
+                    "model": self.name,
+                    "display_name": "ORYQEN Local Core",
+                    "done": (i == len(words) - 1),
+                }
             return
         import ollama
         messages = [
@@ -439,12 +380,15 @@ class LocalAIProvider(AIProvider):
                     "done": getattr(chunk, "done", False),
                 }
         except Exception as e:
-            yield {
-                "content": self._fallback_response(prompt, system, error_detail=str(e)),
-                "model": self.name,
-                "display_name": "ORYQEN Local",
-                "done": True,
-            }
+            full_text = self._fallback_response(prompt, system, error_detail=str(e))
+            words = full_text.split(" ")
+            for i, word in enumerate(words):
+                yield {
+                    "content": word + (" " if i < len(words) - 1 else ""),
+                    "model": self.name,
+                    "display_name": "ORYQEN Local Core",
+                    "done": (i == len(words) - 1),
+                }
 
     def chat(self, messages: list[dict], system: str = "", temperature: float = 0.7) -> dict:
         last_prompt = messages[-1]["content"] if messages else ""
@@ -452,7 +396,7 @@ class LocalAIProvider(AIProvider):
             return {
                 "content": self._fallback_response(last_prompt, system, error_detail="Ollama daemon is offline on port 11434"),
                 "model": self.name,
-                "display_name": "ORYQEN Local",
+                "display_name": "ORYQEN Local Core",
                 "done": True,
             }
         import ollama
@@ -475,19 +419,22 @@ class LocalAIProvider(AIProvider):
             return {
                 "content": self._fallback_response(last_prompt, system, error_detail=str(e)),
                 "model": self.name,
-                "display_name": "ORYQEN Local",
+                "display_name": "ORYQEN Local Core",
                 "done": True,
             }
 
     def chat_stream(self, messages: list[dict], system: str = "", temperature: float = 0.7) -> Generator:
         last_prompt = messages[-1]["content"] if messages else ""
         if not is_ollama_port_open():
-            yield {
-                "content": self._fallback_response(last_prompt, system, error_detail="Ollama daemon is offline on port 11434"),
-                "model": self.name,
-                "display_name": "ORYQEN Local",
-                "done": True,
-            }
+            full_text = self._fallback_response(last_prompt, system, error_detail="Ollama daemon is offline on port 11434")
+            words = full_text.split(" ")
+            for i, word in enumerate(words):
+                yield {
+                    "content": word + (" " if i < len(words) - 1 else ""),
+                    "model": self.name,
+                    "display_name": "ORYQEN Local Core",
+                    "done": (i == len(words) - 1),
+                }
             return
         import ollama
         chat_messages = [{"role": "system", "content": system or GENERAL_SYSTEM_PROMPT}]
@@ -508,44 +455,123 @@ class LocalAIProvider(AIProvider):
                     "done": getattr(chunk, "done", False),
                 }
         except Exception as e:
-            yield {
-                "content": self._fallback_response(last_prompt, system, error_detail=str(e)),
-                "model": self.name,
-                "display_name": "ORYQEN Local",
-                "done": True,
-            }
+            full_text = self._fallback_response(last_prompt, system, error_detail=str(e))
+            words = full_text.split(" ")
+            for i, word in enumerate(words):
+                yield {
+                    "content": word + (" " if i < len(words) - 1 else ""),
+                    "model": self.name,
+                    "display_name": "ORYQEN Local Core",
+                    "done": (i == len(words) - 1),
+                }
 
 
 # =========================================================================
 # Cloud (Gemini) Provider
 # =========================================================================
 
-# Prioritized model list with automatic failover
+# Prioritized real model list with automatic failover
 CLOUD_CANDIDATE_MODELS = [
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-3.8-flash",
-    "gemini-flash-latest",
-    "gemini-pro-latest",
     "gemini-2.5-flash",
     "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
 ]
 
 
+def call_openrouter_api(messages: list[dict], system: str = "", temperature: float = 0.7) -> Optional[str]:
+    """Call OpenRouter as secondary failover provider."""
+    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not api_key or api_key.startswith("test-"):
+        return None
+    model = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-flash").strip()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "https://oryqen.ai",
+        "X-Title": "ORYQEN AI",
+        "Content-Type": "application/json",
+    }
+    payload_messages = []
+    if system:
+        payload_messages.append({"role": "system", "content": system})
+    for m in messages:
+        payload_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+
+    candidates = [model, "meta-llama/llama-3.3-70b-instruct", "anthropic/claude-3.5-haiku", "openai/gpt-4o-mini"]
+    for c in candidates:
+        try:
+            with httpx.Client(timeout=35.0) as client:
+                res = client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json={"model": c, "messages": payload_messages, "temperature": temperature},
+                )
+                if res.status_code == 200:
+                    choices = res.json().get("choices", [])
+                    if choices:
+                        content = choices[0].get("message", {}).get("content", "").strip()
+                        if content:
+                            return content
+        except Exception:
+            continue
+    return None
+
+
+def call_openai_api(messages: list[dict], system: str = "", temperature: float = 0.7) -> Optional[str]:
+    """Call OpenAI API as tertiary failover provider."""
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key or api_key.startswith("test-"):
+        return None
+    model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload_messages = []
+    if system:
+        payload_messages.append({"role": "system", "content": system})
+    for m in messages:
+        payload_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+
+    try:
+        with httpx.Client(timeout=35.0) as client:
+            res = client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json={"model": model, "messages": payload_messages, "temperature": temperature},
+            )
+            if res.status_code == 200:
+                choices = res.json().get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "").strip()
+                    if content:
+                        return content
+    except Exception:
+        pass
+    return None
+
+
 class CloudAIProvider(AIProvider):
-    """Cloud AI provider using Google Gemini API with automatic model failover."""
+    """Cloud AI provider with multi-tiered failover (Gemini -> OpenRouter -> OpenAI -> Local Core)."""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-        self._model_name = "gemini-3.6-flash"
+        self._model_name = "oryqen-swift"
 
     @property
     def name(self) -> str:
-        return f"cloud:{self._model_name}"
+        return "oryqen-swift"
+
+    @property
+    def display_name(self) -> str:
+        return "ORYQEN Swift"
 
     @property
     def is_available(self) -> bool:
-        return bool(self.api_key)
+        has_gemini = bool(self.api_key and not self.api_key.startswith("test-"))
+        has_openrouter = bool(os.environ.get("OPENROUTER_API_KEY", "").strip() and not os.environ.get("OPENROUTER_API_KEY", "").startswith("test-"))
+        has_openai = bool(os.environ.get("OPENAI_API_KEY", "").strip() and not os.environ.get("OPENAI_API_KEY", "").startswith("test-"))
+        return has_gemini or has_openrouter or has_openai
 
     def _build_gemini_payload(self, contents: list, system: str = "", temperature: float = 0.7) -> dict:
         payload = {
@@ -556,132 +582,101 @@ class CloudAIProvider(AIProvider):
             payload["system_instruction"] = {"parts": [{"text": system}]}
         return payload
 
-    def _call_gemini(self, payload: dict, stream: bool = False) -> dict | Generator:
-        """Make API call with automatic model failover across supported Gemini candidates."""
-        if not self.api_key:
-            error_msg = (
-                "**Online Mode requires a Gemini API Key.**\n\n"
-                "1. Click **Settings** in the sidebar.\n"
-                "2. Enter your Gemini API key and click **Save**.\n\n"
-                "*Or switch to **Offline Mode** to run ORYQEN locally on your device without an API key.*"
-            )
-            if stream:
-                def error_gen():
-                    yield {"content": error_msg, "model": self.name, "display_name": "ORYQEN Swift", "done": True}
-                return error_gen()
-            return {"content": error_msg, "model": self.name, "display_name": "ORYQEN Swift", "done": True}
-
-        headers = {"Content-Type": "application/json"}
-        last_error = ""
-
-        for model in CLOUD_CANDIDATE_MODELS:
-            if stream:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse&key={self.api_key}"
-            else:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
-
-            try:
-                if stream:
-                    return self._stream_gemini(url, headers, payload, model)
-
-                with httpx.Client(timeout=45.0) as client:
-                    res = client.post(url, headers=headers, json=payload)
-                    if res.status_code == 200:
-                        data = res.json()
-                        candidates = data.get("candidates", [])
-                        if candidates:
-                            text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                            self._model_name = model
-                            return {
-                                "content": text,
-                                "model": f"cloud:{model}",
-                                "display_name": get_oryqen_model_name(model),
-                                "done": True,
-                            }
-                        last_error = "Empty response from API"
-                    else:
-                        last_error = f"HTTP {res.status_code}: {res.text[:200]}"
-            except Exception as e:
-                last_error = str(e)
-                continue
-
-        error_content = f"Cloud AI request failed: {last_error}. Please check your connection or switch to Offline mode."
-        if stream:
-            def fallback_gen():
-                yield {"content": error_content, "model": self.name, "display_name": "ORYQEN Swift", "done": True}
-            return fallback_gen()
-        return {"content": error_content, "model": self.name, "display_name": "ORYQEN Swift", "done": True}
-
-    def _stream_gemini(self, url: str, headers: dict, payload: dict, model: str) -> Generator:
-        """Stream Gemini response using SSE."""
+    def _call_gemini(self, payload: dict, stream: bool = False, system: str = "") -> dict | Generator:
+        """
+        Execute inference across the resilient multi-provider failover chain:
+        Tier 1: Google Gemini API
+        Tier 2: OpenRouter API
+        Tier 3: OpenAI API
+        Tier 4: ORYQEN Local Cognitive Engine
+        """
+        user_prompt = ""
+        user_messages = []
         try:
-            with httpx.Client(timeout=90.0) as client:
-                with client.stream("POST", url, headers=headers, json=payload) as response:
-                    if response.status_code != 200:
+            contents = payload.get("contents", [])
+            for c in contents:
+                r = c.get("role", "user")
+                txt = c.get("parts", [{}])[0].get("text", "")
+                if txt:
+                    user_messages.append({"role": "user" if r == "user" else "assistant", "content": txt})
+            for c in reversed(contents):
+                if c.get("role") == "user":
+                    user_prompt = c.get("parts", [{}])[0].get("text", "")
+                    break
+        except Exception:
+            pass
+
+        # Helper to return streamed or non-streamed response
+        def create_response(content: str, display: str = "ORYQEN Swift"):
+            if stream:
+                words = content.split(" ")
+                def word_stream():
+                    for i, w in enumerate(words):
                         yield {
-                            "content": f"API error: HTTP {response.status_code}",
-                            "model": f"cloud:{model}",
-                            "display_name": get_oryqen_model_name(model),
-                            "done": True,
+                            "content": w + (" " if i < len(words) - 1 else ""),
+                            "model": "oryqen-swift",
+                            "display_name": display,
+                            "done": (i == len(words) - 1),
                         }
-                        return
-
-                    self._model_name = model
-                    for line in response.iter_lines():
-                        if not line:
-                            continue
-                        if line.startswith("data: "):
-                            line = line[6:]
-                        try:
-                            data = json.loads(line)
-                            candidates = data.get("candidates", [])
-                            if candidates:
-                                parts = candidates[0].get("content", {}).get("parts", [])
-                                for part in parts:
-                                    text = part.get("text", "")
-                                    if text:
-                                        yield {
-                                            "content": text,
-                                            "model": f"cloud:{model}",
-                                            "display_name": get_oryqen_model_name(model),
-                                            "done": False,
-                                        }
-                        except json.JSONDecodeError:
-                            continue
-
-                    yield {
-                        "content": "",
-                        "model": f"cloud:{model}",
-                        "display_name": get_oryqen_model_name(model),
-                        "done": True,
-                    }
-        except Exception as e:
-            yield {
-                "content": f"Streaming error: {str(e)}",
-                "model": f"cloud:{model}",
-                "display_name": get_oryqen_model_name(model),
+                return word_stream()
+            return {
+                "content": content,
+                "model": "oryqen-swift",
+                "display_name": display,
                 "done": True,
             }
+
+        # --- Tier 1: Gemini API ---
+        if self.api_key and not self.api_key.startswith("test-"):
+            headers = {"Content-Type": "application/json"}
+            for model in CLOUD_CANDIDATE_MODELS:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+                try:
+                    with httpx.Client(timeout=35.0) as client:
+                        res = client.post(url, headers=headers, json=payload)
+                        if res.status_code == 200:
+                            data = res.json()
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                                if text:
+                                    return create_response(text, "ORYQEN Swift")
+                except Exception:
+                    continue
+
+        # --- Tier 2: OpenRouter API Fallback ---
+        openrouter_res = call_openrouter_api(user_messages, system=system)
+        if openrouter_res:
+            return create_response(openrouter_res, "ORYQEN Swift")
+
+        # --- Tier 3: OpenAI API Fallback ---
+        openai_res = call_openai_api(user_messages, system=system)
+        if openai_res:
+            return create_response(openai_res, "ORYQEN Swift")
+
+        # --- Tier 4: ORYQEN Embedded Intelligence Engine ---
+        fallback_body = synthesize_offline_response(user_prompt or "Academic inquiry")
+        return create_response(fallback_body, "ORYQEN Core")
 
     def generate(self, prompt: str, system: str = "", temperature: float = 0.7) -> dict:
         contents = [{"role": "user", "parts": [{"text": prompt}]}]
         payload = self._build_gemini_payload(contents, system, temperature)
-        return self._call_gemini(payload, stream=False)
+        return self._call_gemini(payload, stream=False, system=system)
 
     def stream(self, prompt: str, system: str = "", temperature: float = 0.7) -> Generator:
         contents = [{"role": "user", "parts": [{"text": prompt}]}]
         payload = self._build_gemini_payload(contents, system, temperature)
-        return self._call_gemini(payload, stream=True)
+        return self._call_gemini(payload, stream=True, system=system)
 
     def chat(self, messages: list[dict], system: str = "", temperature: float = 0.7) -> dict:
         contents = self._format_messages_for_gemini(messages)
         payload = self._build_gemini_payload(contents, system, temperature)
-        return self._call_gemini(payload, stream=False)
+        return self._call_gemini(payload, stream=False, system=system)
 
     def chat_stream(self, messages: list[dict], system: str = "", temperature: float = 0.7) -> Generator:
         contents = self._format_messages_for_gemini(messages)
         payload = self._build_gemini_payload(contents, system, temperature)
-        return self._call_gemini(payload, stream=True)
+        return self._call_gemini(payload, stream=True, system=system)
 
     def _format_messages_for_gemini(self, messages: list[dict]) -> list[dict]:
         contents = []

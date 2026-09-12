@@ -1301,7 +1301,31 @@ button:hover .anim-spin-hover,
 .voice-preview-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 8px;
+}
+
+.voice-live-transcript {
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-style: italic;
+}
+
+.voice-transcript-review {
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-surface-elevated);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .input-row {

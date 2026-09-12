@@ -48,6 +48,7 @@ from .services.tutor import (
     generate_study_plan,
     get_student_analytics,
     get_smart_recommendations,
+    build_tutor_system_prompt,
 )
 from .services.voice import save_voice_file, transcribe_audio_file, VOICE_DIR
 from .services.memory import (
@@ -233,6 +234,8 @@ class SyncBatchRequest(BaseModel):
 class SettingsUpdate(BaseModel):
     gemini_api_key: Optional[str] = None
     cloud_api_key: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
     supabase_url: Optional[str] = None
     supabase_key: Optional[str] = None
     theme: Optional[str] = None
@@ -997,19 +1000,34 @@ async def voice_process_endpoint(
     audio: UploadFile = File(...),
     mode: str = Form("offline"),
     capability: str = Form("tutor"),
+    transcription: Optional[str] = Form(None),
     user_id: str = Form("local-user"),
 ):
     """
     Process recorded audio message:
-    Saves audio file, performs speech transcription, runs AI inference,
-    and returns both the transcription and AI response.
+    Saves audio file, performs speech transcription (client-assisted or cloud/local STT),
+    runs AI inference, and returns both the verbatim transcription and AI response.
     """
     contents = await audio.read()
     file_path = save_voice_file(contents, audio.filename or "recording.webm")
 
-    # Transcribe audio
-    stt_result = transcribe_audio_file(file_path)
-    user_prompt = stt_result.get("text") or "I need help understanding this concept."
+    # Priority 1: Client-side transcribed text (via Web Speech API)
+    user_prompt = (transcription or "").strip()
+
+    # Priority 2: Backend Cloud / Local transcription
+    if not user_prompt:
+        stt_result = transcribe_audio_file(file_path)
+        user_prompt = stt_result.get("text", "").strip()
+
+    # If completely empty or silent recording
+    if not user_prompt:
+        return {
+            "transcription": "(No speech detected)",
+            "answer": "I received your voice note, but couldn't detect clear speech. Please try speaking closer to the microphone or type your question directly.",
+            "model": "oryqen-swift",
+            "display_name": "ORYQEN Swift",
+            "audio_url": f"/api/voice/audio/{file_path.name}",
+        }
 
     # Run AI inference with transcription
     ai = get_ai_provider(mode=mode)
@@ -1019,10 +1037,11 @@ async def voice_process_endpoint(
     return {
         "transcription": user_prompt,
         "answer": ai_res["content"],
-        "model": ai_res["model"],
-        "display_name": ai_res.get("display_name", get_oryqen_model_name(ai_res["model"])),
+        "model": get_oryqen_model_id(ai_res.get("model", "")),
+        "display_name": ai_res.get("display_name", get_oryqen_model_name(ai_res.get("model", ""))),
         "audio_url": f"/api/voice/audio/{file_path.name}",
     }
+
 
 
 @app.get("/api/voice/audio/{filename}")
@@ -1352,27 +1371,32 @@ _runtime_settings = {}
 @app.get("/api/settings")
 async def get_settings():
     """Get runtime settings with masked API keys and database configuration."""
-    key = _runtime_settings.get("cloud_api_key") or _runtime_settings.get("gemini_api_key") or os.environ.get("GEMINI_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "")
-    masked = ""
-    if key:
-        masked = key[:4] + "*" * (len(key) - 8) + key[-4:] if len(key) > 8 else "****"
-    
+    def mask_key(k: Optional[str]) -> str:
+        if not k:
+            return ""
+        return k[:4] + "*" * max(4, len(k) - 8) + k[-4:] if len(k) > 8 else "****"
+
+    gemini_key = _runtime_settings.get("gemini_api_key") or _runtime_settings.get("cloud_api_key") or os.environ.get("GEMINI_API_KEY", "")
+    openrouter_key = _runtime_settings.get("openrouter_api_key") or os.environ.get("OPENROUTER_API_KEY", "")
+    openai_key = _runtime_settings.get("openai_api_key") or os.environ.get("OPENAI_API_KEY", "")
+
     supabase_url = _runtime_settings.get("supabase_url") or os.environ.get("SUPABASE_URL", "")
     supabase_key = _runtime_settings.get("supabase_key") or os.environ.get("SUPABASE_KEY", "")
-    masked_supa = ""
-    if supabase_key:
-        masked_supa = supabase_key[:4] + "*" * (len(supabase_key) - 8) + supabase_key[-4:] if len(supabase_key) > 8 else "****"
 
     return {
-        "cloud_api_key_set": bool(key),
-        "cloud_api_key_masked": masked,
-        "gemini_api_key_set": bool(key),
-        "gemini_api_key_masked": masked,
+        "cloud_api_key_set": bool(gemini_key or openrouter_key or openai_key),
+        "cloud_api_key_masked": mask_key(gemini_key or openrouter_key or openai_key),
+        "gemini_api_key_set": bool(gemini_key),
+        "gemini_api_key_masked": mask_key(gemini_key),
+        "openrouter_api_key_set": bool(openrouter_key),
+        "openrouter_api_key_masked": mask_key(openrouter_key),
+        "openai_api_key_set": bool(openai_key),
+        "openai_api_key_masked": mask_key(openai_key),
         "supabase_connected": bool(supabase_url and supabase_key),
         "supabase_url": supabase_url,
         "supabase_url_set": bool(supabase_url),
         "supabase_key_set": bool(supabase_key),
-        "supabase_key_masked": masked_supa,
+        "supabase_key_masked": mask_key(supabase_key),
     }
 
 
@@ -1385,6 +1409,14 @@ async def update_settings(req: SettingsUpdate):
         _runtime_settings["gemini_api_key"] = key
         os.environ["GEMINI_API_KEY"] = key
 
+    if req.openrouter_api_key is not None:
+        _runtime_settings["openrouter_api_key"] = req.openrouter_api_key
+        os.environ["OPENROUTER_API_KEY"] = req.openrouter_api_key
+
+    if req.openai_api_key is not None:
+        _runtime_settings["openai_api_key"] = req.openai_api_key
+        os.environ["OPENAI_API_KEY"] = req.openai_api_key
+
     if req.supabase_url is not None:
         _runtime_settings["supabase_url"] = req.supabase_url
         os.environ["SUPABASE_URL"] = req.supabase_url
@@ -1395,17 +1427,30 @@ async def update_settings(req: SettingsUpdate):
 
     try:
         lines = []
+        prefixes = ("GEMINI_API_KEY=", "OPENROUTER_API_KEY=", "OPENAI_API_KEY=", "SUPABASE_URL=", "SUPABASE_KEY=")
         if ENV_PATH.exists():
             existing_lines = ENV_PATH.read_text(encoding="utf-8").splitlines()
             for l in existing_lines:
-                if not any(l.startswith(prefix) for prefix in ("GEMINI_API_KEY=", "SUPABASE_URL=", "SUPABASE_KEY=")):
+                if not any(l.startswith(prefix) for prefix in prefixes):
                     lines.append(l)
         if key:
             lines.append(f"GEMINI_API_KEY={key}")
+        if req.openrouter_api_key:
+            lines.append(f"OPENROUTER_API_KEY={req.openrouter_api_key}")
+        elif os.environ.get("OPENROUTER_API_KEY"):
+            lines.append(f"OPENROUTER_API_KEY={os.environ['OPENROUTER_API_KEY']}")
+        if req.openai_api_key:
+            lines.append(f"OPENAI_API_KEY={req.openai_api_key}")
+        elif os.environ.get("OPENAI_API_KEY"):
+            lines.append(f"OPENAI_API_KEY={os.environ['OPENAI_API_KEY']}")
         if req.supabase_url:
             lines.append(f"SUPABASE_URL={req.supabase_url}")
+        elif os.environ.get("SUPABASE_URL"):
+            lines.append(f"SUPABASE_URL={os.environ['SUPABASE_URL']}")
         if req.supabase_key:
             lines.append(f"SUPABASE_KEY={req.supabase_key}")
+        elif os.environ.get("SUPABASE_KEY"):
+            lines.append(f"SUPABASE_KEY={os.environ['SUPABASE_KEY']}")
         ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
     except Exception as e:
         print(f"[WARN] Could not persist settings to .env: {e}")

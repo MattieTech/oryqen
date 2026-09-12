@@ -679,6 +679,39 @@ async function startVoiceRecording() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     state.voice.audioChunks = [];
     state.voice.mediaRecorder = new MediaRecorder(stream);
+    state.voice.liveTranscript = '';
+
+    // Initialize real-time browser SpeechRecognition if available
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event) => {
+          let accumulated = '';
+          for (let i = 0; i < event.results.length; i++) {
+            accumulated += event.results[i][0].transcript + ' ';
+          }
+          state.voice.liveTranscript = accumulated.trim();
+          const liveEl = document.getElementById('voiceLiveTranscript');
+          if (liveEl) liveEl.textContent = state.voice.liveTranscript || 'Listening...';
+          const reviewEl = document.getElementById('voiceTranscriptReview');
+          if (reviewEl) reviewEl.textContent = state.voice.liveTranscript ? `“${state.voice.liveTranscript}”` : '';
+        };
+
+        recognition.onerror = (e) => {
+          console.warn('Browser speech recognition notice:', e.error);
+        };
+
+        recognition.start();
+        state.voice.recognition = recognition;
+      } catch (recErr) {
+        console.warn('SpeechRecognition initialization skipped:', recErr);
+      }
+    }
 
     state.voice.mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) state.voice.audioChunks.push(e.data);
@@ -689,6 +722,11 @@ async function startVoiceRecording() {
       state.voice.audioUrl = URL.createObjectURL(state.voice.audioBlob);
       const audioPlayer = document.getElementById('voiceAudioPreview');
       if (audioPlayer) audioPlayer.src = state.voice.audioUrl;
+
+      const reviewEl = document.getElementById('voiceTranscriptReview');
+      if (reviewEl) {
+        reviewEl.textContent = state.voice.liveTranscript ? `“${state.voice.liveTranscript}”` : 'Voice note captured';
+      }
 
       document.getElementById('voiceLiveState')?.classList.add('hidden');
       document.getElementById('voicePreviewState')?.classList.remove('hidden');
@@ -703,6 +741,8 @@ async function startVoiceRecording() {
     document.getElementById('voiceLiveState')?.classList.remove('hidden');
     document.getElementById('voicePreviewState')?.classList.add('hidden');
     document.getElementById('micBtn')?.classList.add('recording');
+    const liveEl = document.getElementById('voiceLiveTranscript');
+    if (liveEl) liveEl.textContent = 'Listening...';
 
     // Timer
     state.voice.recordingTimer = setInterval(() => {
@@ -720,6 +760,9 @@ async function startVoiceRecording() {
 }
 
 function stopVoiceRecording() {
+  if (state.voice.recognition) {
+    try { state.voice.recognition.stop(); } catch (e) {}
+  }
   if (state.voice.mediaRecorder && state.voice.isRecording) {
     state.voice.mediaRecorder.stop();
     state.voice.mediaRecorder.stream.getTracks().forEach(t => t.stop());
@@ -730,6 +773,11 @@ function stopVoiceRecording() {
 }
 
 function discardVoiceRecording() {
+  if (state.voice.recognition) {
+    try { state.voice.recognition.stop(); } catch (e) {}
+    state.voice.recognition = null;
+  }
+  state.voice.liveTranscript = '';
   if (state.voice.audioUrl) {
     URL.revokeObjectURL(state.voice.audioUrl);
     state.voice.audioUrl = null;
@@ -742,6 +790,7 @@ function discardVoiceRecording() {
 async function sendVoiceMessage() {
   if (!state.voice.audioBlob) return;
   const audioBlob = state.voice.audioBlob;
+  const transcription = state.voice.liveTranscript || '';
   discardVoiceRecording();
 
   showToast('Processing voice message...');
@@ -750,6 +799,9 @@ async function sendVoiceMessage() {
   formData.append('mode', state.mode);
   formData.append('capability', state.workspace);
   formData.append('user_id', state.user.id);
+  if (transcription) {
+    formData.append('transcription', transcription);
+  }
 
   try {
     const res = await fetch(`${API_BASE}/api/voice/process`, {
@@ -990,8 +1042,18 @@ async function submitUserMessage(overrideQuery) {
 }
 
 // ==========================================================================
-// Message Rendering & Formatting
+// Message Rendering & Formatting with Proprietary ORYQEN Branding
 // ==========================================================================
+function cleanOryqenModelName(raw) {
+  if (!raw) return 'ORYQEN Swift';
+  const clean = String(raw).toLowerCase();
+  if (clean.includes('reason') || clean.includes('pro') || clean.includes('deepseek')) return 'ORYQEN Reason';
+  if (clean.includes('local') || clean.includes('core') || clean.includes('ollama') || clean.includes('qwen') || clean.includes('llama') || clean.includes('offline')) return 'ORYQEN Local Core';
+  if (clean.includes('research')) return 'ORYQEN Research';
+  if (clean.includes('tutor') || clean.includes('socratic')) return 'ORYQEN Tutor';
+  return 'ORYQEN Swift';
+}
+
 function appendMessageRow({ role, content, citations = [], model = '' }) {
   const row = document.createElement('div');
   row.className = `message-row ${role}`;
@@ -1046,8 +1108,9 @@ function appendMessageRow({ role, content, citations = [], model = '' }) {
   if (role === 'assistant') {
     const actionsBar = document.createElement('div');
     actionsBar.className = 'message-actions-bar';
+    const brandedName = cleanOryqenModelName(model);
     actionsBar.innerHTML = `
-      <span class="model-tag">${escapeHtml(model || 'ORYQEN')}</span>
+      <span class="model-tag">${escapeHtml(brandedName)}</span>
       <button class="action-chip copy-chip" title="Copy to clipboard">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
         <span>Copy</span>
@@ -1086,6 +1149,7 @@ function appendMessageRow({ role, content, citations = [], model = '' }) {
 function createStreamingAssistantRow(modelName) {
   const row = document.createElement('div');
   row.className = 'message-row assistant';
+  const brandedName = cleanOryqenModelName(modelName);
 
   row.innerHTML = `
     <div class="message-avatar">
@@ -1098,7 +1162,7 @@ function createStreamingAssistantRow(modelName) {
     <div class="message-content-wrap">
       <div class="message-bubble"></div>
       <div class="message-actions-bar">
-        <span class="model-tag">${escapeHtml(modelName || 'ORYQEN')}</span>
+        <span class="model-tag">${escapeHtml(brandedName)}</span>
       </div>
     </div>
   `;
@@ -1527,6 +1591,8 @@ function setupModals() {
   setupPasswordToggle('loginPwdToggle', 'loginPassword');
   setupPasswordToggle('regPwdToggle', 'regPassword');
   setupPasswordToggle('apiKeyEyeToggle', 'apiKeyInput');
+  setupPasswordToggle('openrouterKeyEyeToggle', 'openrouterKeyInput');
+  setupPasswordToggle('openaiKeyEyeToggle', 'openaiKeyInput');
   setupPasswordToggle('supabaseKeyEyeToggle', 'supabaseKeyInput');
 
   // Auth Tabs Click
@@ -2130,22 +2196,32 @@ function openSettingsModal() {
 }
 
 async function handleSaveCloudKey() {
-  const key = document.getElementById('apiKeyInput')?.value.trim();
-  if (!key) return showToast('Please enter a valid Cloud License Key.', 'error');
+  const gemini_api_key = document.getElementById('apiKeyInput')?.value.trim();
+  const openrouter_api_key = document.getElementById('openrouterKeyInput')?.value.trim();
+  const openai_api_key = document.getElementById('openaiKeyInput')?.value.trim();
+
+  if (!gemini_api_key && !openrouter_api_key && !openai_api_key) {
+    return showToast('Please enter at least one Cloud License or API Key.', 'error');
+  }
+
+  const payload = {};
+  if (gemini_api_key) payload.cloud_api_key = gemini_api_key;
+  if (openrouter_api_key) payload.openrouter_api_key = openrouter_api_key;
+  if (openai_api_key) payload.openai_api_key = openai_api_key;
 
   try {
     const res = await fetch(`${API_BASE}/api/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cloud_api_key: key }),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
-      showToast('ORYQEN Cloud License saved successfully.');
+      showToast('ORYQEN Cloud Intelligence keys updated successfully.');
       loadApiKeyStatus();
       handleTestCloudPing();
     }
   } catch (e) {
-    showToast('Failed to save cloud license.', 'error');
+    showToast('Failed to save cloud credentials.', 'error');
   }
 }
 
@@ -2317,9 +2393,23 @@ async function loadApiKeyStatus() {
       const data = await res.json();
       const statusEl = document.getElementById('apiKeyStatus');
       if (statusEl) {
-        const isSet = data.cloud_api_key_set || data.gemini_api_key_set;
-        const masked = data.cloud_api_key_masked || data.gemini_api_key_masked;
-        statusEl.textContent = isSet ? `Cloud License Configured: ${masked}` : 'No Cloud License key configured.';
+        statusEl.innerHTML = data.gemini_api_key_set
+          ? `<span style="color:#10b981;">● Primary Engine Active:</span> ${data.gemini_api_key_masked}`
+          : '<span style="color:var(--text-muted);">○ Primary Gemini key not set (Local fallback active)</span>';
+      }
+
+      const openrouterEl = document.getElementById('openrouterKeyStatus');
+      if (openrouterEl) {
+        openrouterEl.innerHTML = data.openrouter_api_key_set
+          ? `<span style="color:#3b82f6;">● OpenRouter Failover Active:</span> ${data.openrouter_api_key_masked}`
+          : '<span style="color:var(--text-muted);">○ OpenRouter backup key not set</span>';
+      }
+
+      const openaiEl = document.getElementById('openaiKeyStatus');
+      if (openaiEl) {
+        openaiEl.innerHTML = data.openai_api_key_set
+          ? `<span style="color:#8b5cf6;">● OpenAI Failover Active:</span> ${data.openai_api_key_masked}`
+          : '<span style="color:var(--text-muted);">○ OpenAI backup key not set</span>';
       }
     }
   } catch (e) {}
