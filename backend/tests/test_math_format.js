@@ -96,7 +96,7 @@ function renderMathFormula(formula, isBlock) {
   if (!formula) return '';
   const cleanFormula = formula.trim();
 
-  // Try KaTeX if loaded
+  // KaTeX if available in browser
   if (typeof window !== 'undefined' && window.katex && typeof window.katex.renderToString === 'function') {
     try {
       const rendered = window.katex.renderToString(cleanFormula, {
@@ -119,13 +119,13 @@ function formatMarkdown(text) {
   // 1. Stash Code Blocks
   const codeBlocks = [];
   let working = text.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    const placeholder = `%%CODE_BLOCK_${codeBlocks.length}%%`;
+    const placeholder = `@@CODEBLOCK${codeBlocks.length}@@`;
     codeBlocks.push(`<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(code.trim())}</code></pre>`);
     return placeholder;
   });
 
   working = working.replace(/`([^`]+)`/g, (_, code) => {
-    const placeholder = `%%CODE_INLINE_${codeBlocks.length}%%`;
+    const placeholder = `@@CODEINLINE${codeBlocks.length}@@`;
     codeBlocks.push(`<code>${escapeHtml(code)}</code>`);
     return placeholder;
   });
@@ -135,28 +135,27 @@ function formatMarkdown(text) {
 
   // Block Math: $$ ... $$ and \[ ... \]
   working = working.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
-    const placeholder = `%%MATH_BLOCK_${mathBlocks.length}%%`;
+    const placeholder = `@@MATHBLOCK${mathBlocks.length}@@`;
     mathBlocks.push(renderMathFormula(math, true));
     return placeholder;
   });
   working = working.replace(/\\\[([\s\S]+?)\\\]/g, (_, math) => {
-    const placeholder = `%%MATH_BLOCK_${mathBlocks.length}%%`;
+    const placeholder = `@@MATHBLOCK${mathBlocks.length}@@`;
     mathBlocks.push(renderMathFormula(math, true));
     return placeholder;
   });
 
   // Inline Math: \( ... \) and $ ... $
   working = working.replace(/\\\(([\s\S]+?)\\\)/g, (_, math) => {
-    const placeholder = `%%MATH_INLINE_${mathBlocks.length}%%`;
+    const placeholder = `@@MATHINLINE${mathBlocks.length}@@`;
     mathBlocks.push(renderMathFormula(math, false));
     return placeholder;
   });
   working = working.replace(/(^|[^\\])\$([^\$\n\r]+?)\$/g, (match, prefix, math) => {
-    // Avoid currency like "$5 and $10"
     if (/^\s*\d+([.,]\d+)?\s*$/.test(math)) {
       return match;
     }
-    const placeholder = `%%MATH_INLINE_${mathBlocks.length}%%`;
+    const placeholder = `@@MATHINLINE${mathBlocks.length}@@`;
     mathBlocks.push(renderMathFormula(math, false));
     return prefix + placeholder;
   });
@@ -164,42 +163,118 @@ function formatMarkdown(text) {
   // 3. Process Markdown on standard text
   let html = escapeHtml(working);
 
-  // Headers
-  html = html.replace(/^### (.*)$/gm, '<h4>$1</h4>');
-  html = html.replace(/^## (.*)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^# (.*)$/gm, '<h2>$1</h2>');
+  // Tables: lines with |
+  html = html.replace(/((?:^|\n)\|[^\n]+\|\n\|[\s\-:|]+\|\n(?:\|[^\n]+\|\n?)+)/g, (tableBlock) => {
+    const rows = tableBlock.trim().split('\n');
+    if (rows.length < 2) return tableBlock;
+    const headerCols = rows[0].split('|').slice(1, -1).map(c => `<th>${c.trim()}</th>`).join('');
+    const bodyRows = rows.slice(2).map(r => {
+      const cols = r.split('|').slice(1, -1).map(c => `<td>${c.trim()}</td>`).join('');
+      return `<tr>${cols}</tr>`;
+    }).join('');
+    return `<div class="table-container"><table class="markdown-table"><thead><tr>${headerCols}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+  });
 
-  // Bold & Italic
+  // Blockquotes: lines starting with > or &gt;
+  html = html.replace(/(?:^|\n)(?:&gt;|>)\s*([^\n]+)/g, '<blockquote>$1</blockquote>');
+
+  // Horizontal rules: --- or *** or ___
+  html = html.replace(/^(?:[\t ]*[-*_]){3,}[\t ]*$/gm, '<hr class="markdown-hr">');
+
+  // Headers (Level 6 down to 1)
+  html = html.replace(/^(?:&lt;br&gt;|\n)*######[\t ]+([^\n]+)$/gm, '<h6>$1</h6>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*#####[\t ]+([^\n]+)$/gm, '<h5>$1</h5>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*####[\t ]+([^\n]+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*###[\t ]+([^\n]+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*##[\t ]+([^\n]+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*#[\t ]+([^\n]+)$/gm, '<h1>$1</h1>');
+
+  // Numbered lists: 1. item
+  html = html.replace(/((?:(?:^|\n)\s*\d+\.\s+[^\n]+)+)/g, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      return line.replace(/^\s*\d+\.\s+(.*)$/, '<li>$1</li>');
+    }).join('');
+    return `<ol class="markdown-ol">${items}</ol>`;
+  });
+
+  // Bulleted lists: - item or * item
+  html = html.replace(/((?:(?:^|\n)\s*[-*+]\s+[^\n]+)+)/g, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      return line.replace(/^\s*[-*+]\s+(.*)$/, '<li>$1</li>');
+    }).join('');
+    return `<ul class="markdown-ul">${items}</ul>`;
+  });
+
+  // Bold & Italic (both * and _)
+  html = html.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
 
-  // Lists
-  html = html.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>');
-  html = html.replace(/((?:<li>.*?<\/li>\s*)+)/g, '<ul>$1</ul>');
+  // Strikethrough
+  html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
 
   // Paragraphs & Linebreaks
   html = html.replace(/\n\n+/g, '</p><p>');
   html = html.replace(/\n/g, '<br>');
 
-  // 4. Restore Code & Math with callback functions to avoid $ replacement bugs
+  // Clean up any empty paragraph tags wrapping block elements
+  html = html.replace(/<p>\s*(<(?:h[1-6]|div|table|ul|ol|blockquote|hr)[^>]*>)/gi, '$1');
+  html = html.replace(/(<\/(?:h[1-6]|div|table|ul|ol|blockquote|hr)>)\s*<\/p>/gi, '$1');
+
+  // 4. Restore Code & Math using split().join() with underscore-free placeholders
   mathBlocks.forEach((renderedMath, i) => {
-    html = html.replace(new RegExp(`%%MATH_BLOCK_${i}%%`, 'g'), () => renderedMath);
-    html = html.replace(new RegExp(`%%MATH_INLINE_${i}%%`, 'g'), () => renderedMath);
+    html = html.split(`@@MATHBLOCK${i}@@`).join(renderedMath);
+    html = html.split(`@@MATHINLINE${i}@@`).join(renderedMath);
   });
 
   codeBlocks.forEach((renderedCode, i) => {
-    html = html.replace(new RegExp(`%%CODE_BLOCK_${i}%%`, 'g'), () => renderedCode);
-    html = html.replace(new RegExp(`%%CODE_INLINE_${i}%%`, 'g'), () => renderedCode);
+    html = html.split(`@@CODEBLOCK${i}@@`).join(renderedCode);
+    html = html.split(`@@CODEINLINE${i}@@`).join(renderedCode);
   });
 
   return `<div class="markdown-body"><p>${html}</p></div>`;
 }
 
-// Test Sample
-const mathSample = `Here is the quadratic equation:
+// Test Comprehensive Markdown Sample
+const sample = `### Understanding Quantum Mechanics
+#### 1. Core Principles
+- **Wave-Particle Duality**: Matter exhibits both wave-like and particle-like properties.
+- **Superposition**: States can exist simultaneously until measured.
+
+1. First observation
+2. Second observation
+
+> "Anyone who is not shocked by quantum theory has not understood it." — Niels Bohr
+
+---
+
+| Concept | Classical | Quantum |
+| :--- | :--- | :--- |
+| State | Deterministic | Probabilistic |
+
+Here is the quadratic equation:
 $$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$
-where $a \\neq 0$ and the discriminant is $\\Delta = b^2 - 4ac$.
+where $a \\neq 0$ and $E = mc^2$.`;
 
-Also, Einstein's mass-energy equivalence is $E = mc^2$.`;
+const result = formatMarkdown(sample);
+console.log(result);
 
-console.log(formatMarkdown(mathSample));
+// Assertions to verify no raw markdown symbols leaked
+const hasRawHashes = /#{1,6}\s/.test(result);
+const hasRawDashHr = /(?:^|\n)---/.test(result);
+const hasRawGt = /(?:^|\n)&gt;\s/.test(result);
+const hasRawPipe = /\|/.test(result);
+
+console.log("\n--- Verification Assertions ---");
+console.log("No raw hashes (###):", !hasRawHashes);
+console.log("No raw horizontal rules (---):", !hasRawDashHr);
+console.log("No raw blockquotes (>):", !hasRawGt);
+console.log("No raw table pipes (|):", !hasRawPipe);
+
+if (!hasRawHashes && !hasRawDashHr && !hasRawGt && !hasRawPipe) {
+  console.log("ALL MARKDOWN TYPOGRAPHY ASSERTIONS PASSED!");
+} else {
+  process.exit(1);
+}

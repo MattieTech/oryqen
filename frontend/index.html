@@ -160,6 +160,14 @@
             </svg>
             <span>Settings</span>
           </button>
+
+          <button class="sub-link-btn" id="openAdminModalBtn" title="Administrator Control & Telemetry">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span>Admin Portal</span>
+          </button>
         </div>
 
         <!-- User Profile Quick Bar -->
@@ -231,10 +239,16 @@
             </svg>
           </button>
 
-          <!-- Real User Account Pill / Sign In Trigger -->
+          <!-- User Account / Profile Trigger -->
           <button type="button" class="header-account-btn" id="headerUserBtn" title="Account & Profile">
-            <span class="header-user-avatar" id="headerUserAvatar">G</span>
-            <span class="header-user-label desktop-only" id="headerUserName">Sign In</span>
+            <span class="header-user-avatar-wrap" id="headerUserAvatarWrap">
+              <svg class="header-user-icon" id="headerDefaultUserIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <span class="header-user-initial hidden" id="headerUserInitial">S</span>
+            </span>
+            <span class="header-user-label desktop-only" id="headerUserName">Account</span>
           </button>
         </div>
       </header>
@@ -468,6 +482,16 @@
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                 <line x1="12" y1="19" x2="12" y2="23"></line>
                 <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+
+            <!-- Mobile LAN Audio Note Uploader (works over HTTP & LAN) -->
+            <input type="file" id="voiceFileInput" accept="audio/*" capture="microphone" class="file-input-hidden" style="display: none;">
+            <button type="button" class="input-action-btn" id="uploadVoiceBtn" title="Upload or Record Voice Note on Phone">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 18V5l12-2v13"></path>
+                <circle cx="6" cy="18" r="3"></circle>
+                <circle cx="18" cy="16" r="3"></circle>
               </svg>
             </button>
 
@@ -937,6 +961,42 @@
           </div>
         </form>
 
+        <!-- OTP & Email Confirmation Panel -->
+        <div id="otpVerifyPanel" class="auth-form-panel hidden">
+          <div class="otp-notice-box">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+              <polyline points="22,6 12,13 2,6"></polyline>
+            </svg>
+            <h4>Verify Your Scholar Account</h4>
+            <p id="otpInstructions">We generated a 6-digit OTP code and a one-click confirmation link for <strong id="otpTargetEmail"></strong>.</p>
+          </div>
+
+          <div class="settings-field">
+            <label class="settings-label" for="otpInput">Enter 6-Digit Verification Code</label>
+            <input type="text" id="otpInput" class="settings-input otp-code-input" placeholder="••••••" maxlength="6" autocomplete="one-time-code">
+          </div>
+
+          <button type="button" class="btn btn-primary full-width" id="submitOtpBtn">
+            <span>Verify & Activate Account</span>
+          </button>
+
+          <div class="otp-divider-row">
+            <span>OR CONFIRM VIA EMAIL LINK</span>
+          </div>
+
+          <div class="otp-link-action-card">
+            <a href="#" id="otpDirectConfirmLink" target="_blank" class="btn btn-secondary full-width" style="text-decoration: none; justify-content: center;">
+              <span>Confirm via One-Click Link</span>
+            </a>
+          </div>
+
+          <div class="auth-switch-row" style="margin-top: 16px;">
+            <button type="button" class="btn-link" id="resendOtpBtn">Resend Code</button>
+            <button type="button" class="btn-link" id="backToLoginFromOtpBtn">Back to Sign In</button>
+          </div>
+        </div>
+
         <!-- Profile Form (Active Session) -->
         <form id="profileForm" class="auth-form-panel hidden">
           <div class="profile-card-header">
@@ -1028,13 +1088,13 @@
     </div>
   </div>
 
-  <!-- ================= MODAL: SETTINGS CONTROL CENTER ================= -->
+  <!-- ================= MODAL: USER SETTINGS ================= -->
   <div class="modal-overlay hidden" id="settingsModal">
     <div class="modal-container settings-modal-container">
       <div class="modal-header">
         <div class="modal-title-group">
-          <h3>ORYQEN System Control Center</h3>
-          <p>Configure proprietary neural models, cloud intelligence, database sync, and audio.</p>
+          <h3>User Preferences & Settings</h3>
+          <p>Customize your visual atmosphere, voice pace, learning profile, and local cache.</p>
         </div>
         <button class="icon-btn close-modal-btn" id="closeSettingsBtn" aria-label="Close Settings">&times;</button>
       </div>
@@ -1046,25 +1106,17 @@
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             <span>Appearance</span>
           </button>
-          <button class="settings-nav-item" data-tab="models">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
-            <span>AI Architecture</span>
-          </button>
-          <button class="settings-nav-item" data-tab="cloud">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
-            <span>Cloud Intelligence</span>
-          </button>
           <button class="settings-nav-item" data-tab="voice">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
             <span>Voice & Audio</span>
           </button>
-          <button class="settings-nav-item" data-tab="database">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
-            <span>Supabase Sync</span>
+          <button class="settings-nav-item" data-tab="learning">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+            <span>Learning Profile</span>
           </button>
           <button class="settings-nav-item" data-tab="data">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            <span>Data & Privacy</span>
+            <span>Data & Cache</span>
           </button>
         </aside>
 
@@ -1114,103 +1166,10 @@
             </div>
           </div>
 
-          <!-- Tab 2: AI Architecture -->
-          <div class="settings-tab-pane" id="pane-models">
-            <div class="settings-section">
-              <div class="settings-section-title">Proprietary Cognitive Engines</div>
-              <div class="model-tier-cards">
-                <div class="model-spec-card active">
-                  <div class="spec-header">
-                    <span class="spec-name">ORYQEN Reason</span>
-                    <span class="badge badge-accent">Cloud Flagship</span>
-                  </div>
-                  <p class="spec-desc">Deep cognitive reasoning engine for step-by-step math derivations, complex coding, and Socratic tutoring.</p>
-                  <div class="spec-meta">
-                    <span>Context: 1M Tokens</span>
-                    <span>Modality: Multimodal Text & Vision</span>
-                  </div>
-                </div>
-
-                <div class="model-spec-card">
-                  <div class="spec-header">
-                    <span class="spec-name">ORYQEN Swift</span>
-                    <span class="badge badge-blue">Cloud High-Speed</span>
-                  </div>
-                  <p class="spec-desc">Low-latency model optimized for instant query answering, flashcard generation, and rapid summaries.</p>
-                  <div class="spec-meta">
-                    <span>Latency: ~350ms</span>
-                    <span>Efficiency: Ultra High</span>
-                  </div>
-                </div>
-
-                <div class="model-spec-card">
-                  <div class="spec-header">
-                    <span class="spec-name">ORYQEN Local Core</span>
-                    <span class="badge badge-secondary">On-Device Neural Engine</span>
-                  </div>
-                  <p class="spec-desc">Fully private, zero-internet on-device neural model running directly on your local hardware.</p>
-                  <div class="spec-meta">
-                    <span>Privacy: 100% Offline</span>
-                    <span>Hardware: CPU / NPU / GPU</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="settings-section">
-              <div class="settings-section-title">Generation Parameters</div>
-              <div class="settings-field">
-                <div class="field-label-row">
-                  <label class="settings-label" for="settingTempSlider">Creativity / Temperature</label>
-                  <span class="field-val-pill" id="tempValDisplay">0.40 (Precise)</span>
-                </div>
-                <input type="range" id="settingTempSlider" min="0" max="1" step="0.05" value="0.4" class="settings-range">
-              </div>
-            </div>
-          </div>
-
-          <!-- Tab 3: Cloud Intelligence & Multi-Tier Failover -->
-          <div class="settings-tab-pane" id="pane-cloud">
-            <div class="settings-section">
-              <div class="settings-section-title">Cloud Intelligence & Failover Architecture</div>
-              <p class="settings-help">ORYQEN operates with an automated 4-tier resilient neural pipeline. All proprietary model credentials and routing policies are secured server-side in your environment configuration, protecting them from client inspection and unauthorized access.</p>
-
-              <!-- Tier Architecture Display -->
-              <div class="model-cards-grid" style="margin-top: 14px; margin-bottom: 16px;">
-                <div class="model-info-card">
-                  <div class="card-header-row">
-                    <span class="model-tag-pill accent">Cloud Intelligence</span>
-                  </div>
-                  <div class="card-title">ORYQEN Swift (Active Cloud Engine)</div>
-                  <div class="card-desc">High-speed conversational intelligence, Socratic tutoring, and real-time study assistance powered by resilient neural routing.</div>
-                </div>
-
-                <div class="model-info-card">
-                  <div class="card-header-row">
-                    <span class="model-tag-pill purple">Offline Cognitive Core</span>
-                  </div>
-                  <div class="card-title">ORYQEN Local Core (On-Device)</div>
-                  <div class="card-desc">Embedded on-device intelligence providing continuous Socratic tutoring, quizzes, and flashcards with zero internet required.</div>
-                </div>
-              </div>
-
-              <div class="connection-action-row" style="margin-top: 14px;">
-                <button type="button" class="btn btn-primary" id="testCloudPingBtn">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-                  <span>Test Neural Cloud Connection</span>
-                </button>
-                <div class="connection-status-pill hidden" id="cloudPingResult">
-                  <span class="status-dot"></span>
-                  <span class="status-msg">Checking...</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tab 4: Voice & Audio -->
+          <!-- Tab 2: Voice & Audio -->
           <div class="settings-tab-pane" id="pane-voice">
             <div class="settings-section">
-              <div class="settings-section-title">Speech-to-Text & Neural Audio</div>
+              <div class="settings-section-title">Speech Synthesis Pace & Tone</div>
               <div class="settings-field">
                 <label class="settings-label" for="settingTtsVoice">Text-to-Speech Voice</label>
                 <select id="settingTtsVoice" class="settings-input">
@@ -1236,45 +1195,29 @@
             </div>
           </div>
 
-          <!-- Tab 5: Supabase Sync -->
-          <div class="settings-tab-pane" id="pane-database">
+          <!-- Tab 3: Learning Profile -->
+          <div class="settings-tab-pane" id="pane-learning">
             <div class="settings-section">
-              <div class="settings-section-title">Supabase Cloud Database & Embeddings</div>
-              <p class="settings-help">ORYQEN synchronizes learning records, flashcards, vector memories, and study progress with your Supabase PostgreSQL cluster. All connection strings and service keys are managed server-side in your environment configuration for maximum security.</p>
-
-              <div class="model-cards-grid" style="margin-top: 14px; margin-bottom: 16px;">
-                <div class="model-info-card">
-                  <div class="card-header-row">
-                    <span class="model-tag-pill accent">Managed Cluster</span>
-                  </div>
-                  <div class="card-title">PostgreSQL & pgvector</div>
-                  <div class="card-desc">High-performance vector embeddings, relational learning history, and multi-device account state.</div>
-                </div>
-
-                <div class="model-info-card">
-                  <div class="card-header-row">
-                    <span class="model-tag-pill blue">Security Active</span>
-                  </div>
-                  <div class="card-title">Row-Level Security (RLS)</div>
-                  <div class="card-desc">Isolated student schemas with strict ownership policies protecting individual user study data.</div>
-                </div>
+              <div class="settings-section-title">Academic Level & Focus</div>
+              <div class="settings-field">
+                <label class="settings-label" for="userEducationLevel">Current Academic Level</label>
+                <select id="userEducationLevel" class="settings-input">
+                  <option value="beginner">Secondary / High School</option>
+                  <option value="intermediate" selected>Undergraduate / College</option>
+                  <option value="advanced">Postgraduate / Researcher</option>
+                  <option value="engineer">Software Engineer & Builder</option>
+                  <option value="educator">Teacher / Lecturer</option>
+                </select>
               </div>
-
-              <div class="connection-action-row">
-                <button type="button" class="btn btn-primary" id="testDbConnectionBtn">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
-                  <span>Test Database Connection</span>
-                </button>
-                <button type="button" class="btn btn-secondary" id="copySchemaSqlBtn">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                  <span>View SQL Schema</span>
-                </button>
+              <div class="settings-field">
+                <label class="settings-label" for="userTargetExam">Primary Target Exam / Goal</label>
+                <input type="text" id="userTargetExam" class="settings-input" placeholder="e.g. WAEC, JAMB, GCSE, University Finals, Coding Mastery">
               </div>
-              <div class="settings-key-status" id="supabaseStatus" style="margin-top: 12px;"></div>
+              <button type="button" class="btn btn-primary" id="saveLearningProfileBtn">Save Profile Preferences</button>
             </div>
           </div>
 
-          <!-- Tab 6: Data, Privacy & Telemetry -->
+          <!-- Tab 4: Data & Cache -->
           <div class="settings-tab-pane" id="pane-data">
             <div class="settings-section">
               <div class="settings-section-title">Data Portability & Backups</div>
@@ -1292,32 +1235,11 @@
             </div>
 
             <div class="settings-section">
-              <div class="settings-section-title">Engine Architecture & Telemetry</div>
-              <div class="settings-info-grid">
-                <div class="settings-info-item">
-                  <span class="settings-info-label">Active Cloud Neural Engine</span>
-                  <span class="settings-info-value" id="settingsCloudModel">ORYQEN Reason / Swift</span>
-                </div>
-                <div class="settings-info-item">
-                  <span class="settings-info-label">On-Device Engine</span>
-                  <span class="settings-info-value" id="settingsLocalModel">ORYQEN Local Core</span>
-                </div>
-                <div class="settings-info-item">
-                  <span class="settings-info-label">Knowledge Vector Store</span>
-                  <span class="settings-info-value">FAISS (On-Device Neural Memory)</span>
-                </div>
-                <div class="settings-info-item">
-                  <span class="settings-info-label">Embedded Document Chunks</span>
-                  <span class="settings-info-value" id="settingsChunkCount">0 chunks indexed</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="settings-section">
-              <div class="settings-section-title">About ORYQEN</div>
-              <p class="settings-about-text">
-                <strong>ORYQEN</strong> (pronounced <em>"Oi-ken"</em>) is a next-generation AI platform engineered by <strong>SyntaxNexus Developer</strong> (formerly MattieTech), founded and led by CEO <strong>Matthew Aliu</strong>. Built for real-world academic empowerment, deep research, and dual online/offline autonomy.
-              </p>
+              <div class="settings-section-title">Local Device Cache</div>
+              <p class="settings-help">Clear stored offline session history and temporary conversation caches on this browser.</p>
+              <button type="button" class="btn btn-ghost text-danger" id="clearLocalCacheBtn">
+                <span>Clear Browser Cache & Offline Sessions</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1325,6 +1247,198 @@
 
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" id="dismissSettingsBtn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: ADMIN PASSCODE LOGIN ================= -->
+  <div class="modal-overlay hidden" id="adminLoginModal">
+    <div class="modal-container" style="max-width: 440px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Administrator Verification</h3>
+          <p>Enter master administrator key to access system controls, database telemetry, and AI routing.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeAdminLoginBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="adminLoginForm">
+          <div class="settings-field">
+            <label class="settings-label" for="adminPasscodeInput">Admin Master Passcode</label>
+            <input type="password" id="adminPasscodeInput" class="settings-input" placeholder="Enter admin passcode" required autofocus>
+          </div>
+          <button type="submit" class="btn btn-primary full-width" id="submitAdminLoginBtn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span>Verify & Open Admin Portal</span>
+          </button>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissAdminLoginBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: SECURE ADMIN DASHBOARD ================= -->
+  <div class="modal-overlay hidden" id="adminModal">
+    <div class="modal-container settings-modal-container modal-large">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-badge-row">
+            <span class="tier-pill">ADMINISTRATOR</span>
+            <span class="badge badge-accent">CONFIDENTIAL</span>
+          </div>
+          <h3>ORYQEN Administrator Operations Dashboard</h3>
+          <p>Central telemetry, multi-tier neural models, database synchronization, and system maintenance.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeAdminModalBtn">&times;</button>
+      </div>
+
+      <div class="settings-modal-layout">
+        <!-- Admin Navigation Rail -->
+        <aside class="settings-nav-rail">
+          <button class="settings-nav-item active" data-admin-tab="telemetry">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            <span>Telemetry</span>
+          </button>
+          <button class="settings-nav-item" data-admin-tab="routing">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+            <span>AI Routing</span>
+          </button>
+          <button class="settings-nav-item" data-admin-tab="database">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+            <span>Database & Sync</span>
+          </button>
+        </aside>
+
+        <!-- Admin Content Area -->
+        <div class="settings-content-area">
+          <!-- Admin Tab 1: Telemetry -->
+          <div class="settings-tab-pane active" id="admin-pane-telemetry">
+            <div class="settings-section">
+              <div class="settings-section-title">Platform Activity Overview</div>
+              <div class="stats-overview-grid" style="margin-top: 10px;">
+                <div class="stat-card">
+                  <span class="stat-value" id="adminStatUsers">0</span>
+                  <span class="stat-label">Registered Users</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-value" id="adminStatConvs">0</span>
+                  <span class="stat-label">Conversations</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-value" id="adminStatMsgs">0</span>
+                  <span class="stat-label">Messages Processed</span>
+                </div>
+                <div class="stat-card">
+                  <span class="stat-value" id="adminStatChunks">0</span>
+                  <span class="stat-label">Indexed Vector Chunks</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">System Infrastructure Status</div>
+              <div class="settings-info-grid">
+                <div class="settings-info-item">
+                  <span class="settings-info-label">Environment</span>
+                  <span class="settings-info-value">Production / Local Hybrid</span>
+                </div>
+                <div class="settings-info-item">
+                  <span class="settings-info-label">Vector Store Engine</span>
+                  <span class="settings-info-value">FAISS (On-Device Local)</span>
+                </div>
+                <div class="settings-info-item">
+                  <span class="settings-info-label">Primary Database</span>
+                  <span class="settings-info-value">SQLite (Local) + Supabase (Cloud Sync)</span>
+                </div>
+                <div class="settings-info-item">
+                  <span class="settings-info-label">Server Host</span>
+                  <span class="settings-info-value">0.0.0.0:8000</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Admin Tab 2: AI Routing -->
+          <div class="settings-tab-pane" id="admin-pane-routing">
+            <div class="settings-section">
+              <div class="settings-section-title">Multi-Tier Failover Architecture</div>
+              <div class="model-cards-grid" style="margin-top: 10px; margin-bottom: 16px;">
+                <div class="model-info-card">
+                  <div class="card-header-row">
+                    <span class="model-tag-pill accent">Tier 1 Cloud</span>
+                    <span class="badge badge-accent" id="adminGeminiStatus">Active</span>
+                  </div>
+                  <div class="card-title">Google Gemini Engine</div>
+                  <div class="card-desc" id="adminGeminiMasked">Key: **********</div>
+                </div>
+
+                <div class="model-info-card">
+                  <div class="card-header-row">
+                    <span class="model-tag-pill blue">Tier 2 Cloud</span>
+                    <span class="badge badge-blue" id="adminOpenRouterStatus">Active</span>
+                  </div>
+                  <div class="card-title">OpenRouter Failover</div>
+                  <div class="card-desc" id="adminOpenRouterMasked">Key: **********</div>
+                </div>
+
+                <div class="model-info-card">
+                  <div class="card-header-row">
+                    <span class="model-tag-pill purple">Tier 3 Local</span>
+                    <span class="badge badge-secondary" id="adminLocalStatus">Autonomous</span>
+                  </div>
+                  <div class="card-title">ORYQEN Local Core</div>
+                  <div class="card-desc">100% On-device autonomous reasoning engine with dynamic multi-domain synthesis.</div>
+                </div>
+              </div>
+
+              <div class="connection-action-row">
+                <button type="button" class="btn btn-primary" id="adminTestPingBtn">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                  <span>Test Live Neural Cloud Ping</span>
+                </button>
+                <div class="connection-status-pill hidden" id="adminPingResult">
+                  <span class="status-dot"></span>
+                  <span class="status-msg">Testing...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Admin Tab 3: Database & Sync -->
+          <div class="settings-tab-pane" id="admin-pane-database">
+            <div class="settings-section">
+              <div class="settings-section-title">Supabase PostgreSQL Cluster</div>
+              <div class="settings-info-grid" style="margin-top: 10px; margin-bottom: 16px;">
+                <div class="settings-info-item">
+                  <span class="settings-info-label">Supabase URL</span>
+                  <span class="settings-info-value" id="adminSupabaseUrl">Not Configured</span>
+                </div>
+                <div class="settings-info-item">
+                  <span class="settings-info-label">Service Key</span>
+                  <span class="settings-info-value" id="adminSupabaseKey">Configured</span>
+                </div>
+              </div>
+
+              <div class="connection-action-row">
+                <button type="button" class="btn btn-primary" id="adminTestDbBtn">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+                  <span>Verify Database Connection</span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="adminViewSchemaBtn">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  <span>View Database SQL Schema</span>
+                </button>
+              </div>
+              <div class="settings-key-status" id="adminDbStatus" style="margin-top: 12px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissAdminModalBtn">Close Dashboard</button>
       </div>
     </div>
   </div>

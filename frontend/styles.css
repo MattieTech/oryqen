@@ -3602,5 +3602,278 @@ input:checked + .slider:before {
   }
 }
 
+/* ==========================================================================
+   Markdown Typography & Formatting (Tables, Quotes, Lists, HR)
+   ========================================================================== */
+.table-container {
+  overflow-x: auto;
+  margin: 14px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #232d3f);
+  background: var(--bg-surface, rgba(255, 255, 255, 0.02));
+}
 
+.markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  text-align: left;
+}
 
+.markdown-table th {
+  background: rgba(99, 102, 241, 0.08);
+  padding: 10px 14px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  border-bottom: 1px solid var(--border-color, #232d3f);
+}
+
+.markdown-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary, #cbd5e1);
+}
+
+.markdown-table tr:last-child td {
+  border-bottom: none;
+}
+
+.markdown-hr {
+  border: none;
+  height: 1px;
+  background: var(--border-color, #2d3748);
+  margin: 20px 0;
+  opacity: 0.7;
+}
+
+.markdown-body blockquote {
+  border-left: 3.5px solid #6366f1;
+  background: rgba(99, 102, 241, 0.06);
+  padding: 10px 16px;
+  margin: 12px 0;
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.markdown-ol,
+.markdown-ul {
+  padding-left: 22px;
+  margin: 10px 0;
+}
+
+.markdown-ol li,
+.markdown-ul li {
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+
+/* ==========================================================================
+   OTP Verification & Account Verification Styles
+   ========================================================================== */
+.otp-notice-box {
+  text-align: center;
+  padding: 18px 16px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.otp-notice-box svg {
+  color: #818cf8;
+  margin-bottom: 10px;
+}
+
+.otp-notice-box h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-primary, #fff);
+}
+
+.otp-notice-box p {
+  font-size: 13px;
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.otp-code-input {
+  font-size: 26px !important;
+  letter-spacing: 10px;
+  text-align: center;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace, Consolas;
+  padding: 12px !important;
+  color: #818cf8 !important;
+}
+
+.otp-divider-row {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 20px 0 16px;
+  color: var(--text-muted, #64748b);
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.otp-divider-row::before,
+.otp-divider-row::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border-color, #232d3f);
+}
+
+.otp-divider-row span {
+  padding: 0 10px;
+}
+
+.otp-link-action-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color, #232d3f);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+/* ==========================================================================
+   Admin Operations Dashboard Modal Styles
+   ========================================================================== */
+.admin-modal-container {
+  max-width: 860px;
+  width: 95%;
+}
+
+.admin-layout {
+  display: flex;
+  gap: 22px;
+  min-height: 400px;
+}
+
+.admin-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 190px;
+  border-right: 1px solid var(--border-color, #232d3f);
+  padding-right: 14px;
+}
+
+.admin-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.admin-nav-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary, #fff);
+}
+
+.admin-nav-item.active {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  font-weight: 600;
+}
+
+.admin-content {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 65vh;
+  padding-right: 4px;
+}
+
+.admin-tab-pane {
+  display: none;
+}
+
+.admin-tab-pane.active {
+  display: block;
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+
+.stat-telemetry-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color, #232d3f);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.telemetry-val {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary, #f8fafc);
+}
+
+.telemetry-lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted, #64748b);
+  margin-top: 6px;
+}
+
+.masked-key-card {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-color, #232d3f);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.masked-key-card label {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted, #64748b);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.masked-key-box {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12.5px;
+  color: #a5b4fc;
+  word-break: break-all;
+}
+
+/* Mobile adjustments for Admin Layout */
+@media (max-width: 640px) {
+  .admin-layout {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .admin-sidebar-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color, #232d3f);
+    padding-bottom: 10px;
+    padding-right: 0;
+  }
+
+  .telemetry-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

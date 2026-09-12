@@ -659,11 +659,67 @@ function setupVoiceSystem() {
   const stopBtn = document.getElementById('stopRecordingBtn');
   const discardBtn = document.getElementById('discardVoiceBtn');
   const sendVoiceBtn = document.getElementById('sendVoiceBtn');
+  const voiceFileInput = document.getElementById('voiceFileInput');
+  const uploadVoiceBtn = document.getElementById('uploadVoiceBtn');
 
   micBtn?.addEventListener('click', toggleVoiceRecording);
   stopBtn?.addEventListener('click', stopVoiceRecording);
   discardBtn?.addEventListener('click', discardVoiceRecording);
   sendVoiceBtn?.addEventListener('click', sendVoiceMessage);
+
+  uploadVoiceBtn?.addEventListener('click', () => {
+    voiceFileInput?.click();
+  });
+
+  voiceFileInput?.addEventListener('change', handleVoiceFileUpload);
+}
+
+async function handleVoiceFileUpload(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  showToast('Processing audio note...');
+  const formData = new FormData();
+  formData.append('audio', file, file.name || 'recording.m4a');
+  formData.append('mode', state.mode);
+  formData.append('capability', state.workspace);
+  formData.append('user_id', state.user.id);
+
+  const thinkingId = 'voice-file-' + Date.now();
+  appendThinkingRow(thinkingId);
+  scrollToBottom();
+
+  try {
+    const res = await fetch(`${API_BASE}/api/voice/process`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    removeElement(thinkingId);
+    if (!res.ok) throw new Error('Voice note processing failed');
+    const data = await res.json();
+
+    const userQuery = data.transcription || 'Voice audio note';
+    appendMessageRow({ role: 'user', content: `🎙️ "${userQuery}"` });
+    state.messages.push({ role: 'user', content: userQuery });
+
+    const asstMsg = {
+      role: 'assistant',
+      content: data.answer || 'Audio processed.',
+      citations: [],
+      model: data.model || 'ORYQEN Voice',
+    };
+    appendMessageRow(asstMsg);
+    state.messages.push(asstMsg);
+    scrollToBottom();
+
+    speakText(data.answer);
+  } catch (err) {
+    removeElement(thinkingId);
+    showToast(`Voice note error: ${err.message}`, 'error');
+  } finally {
+    e.target.value = '';
+  }
 }
 
 async function toggleVoiceRecording() {
@@ -675,6 +731,13 @@ async function toggleVoiceRecording() {
 }
 
 async function startVoiceRecording() {
+  const isSecure = window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (!isSecure || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Direct mic restricted on HTTP. Opening audio recorder...', 'info');
+    document.getElementById('voiceFileInput')?.click();
+    return;
+  }
+
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     state.voice.audioChunks = [];
@@ -755,7 +818,9 @@ async function startVoiceRecording() {
 
     showToast('Recording voice question...');
   } catch (err) {
-    showToast('Microphone access denied or unavailable.', 'error');
+    console.warn('Microphone access issue:', err);
+    showToast('Microphone access denied. Opening audio recorder...', 'info');
+    document.getElementById('voiceFileInput')?.click();
   }
 }
 
@@ -985,6 +1050,7 @@ async function submitUserMessage(overrideQuery) {
               const data = JSON.parse(line.slice(6));
               if (data.conversation_id && !state.currentConversationId) {
                 state.currentConversationId = data.conversation_id;
+                localStorage.setItem('oryqen_current_conv_id', state.currentConversationId);
                 document.getElementById('currentChatTitle').textContent = query.slice(0, 32);
                 loadConversations();
               }
@@ -1013,6 +1079,12 @@ async function submitUserMessage(overrideQuery) {
         body: JSON.stringify(payload),
       });
       const data = await fallbackRes.json();
+      if (data.conversation_id && !state.currentConversationId) {
+        state.currentConversationId = data.conversation_id;
+        localStorage.setItem('oryqen_current_conv_id', state.currentConversationId);
+        document.getElementById('currentChatTitle').textContent = query.slice(0, 32);
+        loadConversations();
+      }
       appendMessageRow({
         role: 'assistant',
         content: data.answer || 'Response completed.',
@@ -1216,6 +1288,7 @@ function scrollToBottom() {
 
 function startNewChat() {
   state.currentConversationId = null;
+  localStorage.removeItem('oryqen_current_conv_id');
   state.messages = [];
   document.getElementById('chatMessages').innerHTML = '';
 
@@ -1341,16 +1414,16 @@ function fallbackFormatMath(formula, isBlock) {
 function formatMarkdown(text) {
   if (!text) return '';
 
-  // 1. Stash Code Blocks
+  // 1. Stash Code Blocks with underscore-free placeholders
   const codeBlocks = [];
   let working = text.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    const placeholder = `%%CODE_BLOCK_${codeBlocks.length}%%`;
+    const placeholder = `@@CODEBLOCK${codeBlocks.length}@@`;
     codeBlocks.push(`<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(code.trim())}</code></pre>`);
     return placeholder;
   });
 
   working = working.replace(/`([^`]+)`/g, (_, code) => {
-    const placeholder = `%%CODE_INLINE_${codeBlocks.length}%%`;
+    const placeholder = `@@CODEINLINE${codeBlocks.length}@@`;
     codeBlocks.push(`<code>${escapeHtml(code)}</code>`);
     return placeholder;
   });
@@ -1360,28 +1433,27 @@ function formatMarkdown(text) {
 
   // Block Math: $$ ... $$ and \[ ... \]
   working = working.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
-    const placeholder = `%%MATH_BLOCK_${mathBlocks.length}%%`;
+    const placeholder = `@@MATHBLOCK${mathBlocks.length}@@`;
     mathBlocks.push(renderMathFormula(math, true));
     return placeholder;
   });
   working = working.replace(/\\\[([\s\S]+?)\\\]/g, (_, math) => {
-    const placeholder = `%%MATH_BLOCK_${mathBlocks.length}%%`;
+    const placeholder = `@@MATHBLOCK${mathBlocks.length}@@`;
     mathBlocks.push(renderMathFormula(math, true));
     return placeholder;
   });
 
   // Inline Math: \( ... \) and $ ... $
   working = working.replace(/\\\(([\s\S]+?)\\\)/g, (_, math) => {
-    const placeholder = `%%MATH_INLINE_${mathBlocks.length}%%`;
+    const placeholder = `@@MATHINLINE${mathBlocks.length}@@`;
     mathBlocks.push(renderMathFormula(math, false));
     return placeholder;
   });
   working = working.replace(/(^|[^\\])\$([^\$\n\r]+?)\$/g, (match, prefix, math) => {
-    // Avoid currency like "$5 and $10"
     if (/^\s*\d+([.,]\d+)?\s*$/.test(math)) {
       return match;
     }
-    const placeholder = `%%MATH_INLINE_${mathBlocks.length}%%`;
+    const placeholder = `@@MATHINLINE${mathBlocks.length}@@`;
     mathBlocks.push(renderMathFormula(math, false));
     return prefix + placeholder;
   });
@@ -1389,32 +1461,75 @@ function formatMarkdown(text) {
   // 3. Process Markdown on standard text
   let html = escapeHtml(working);
 
-  // Headers
-  html = html.replace(/^### (.*)$/gm, '<h4>$1</h4>');
-  html = html.replace(/^## (.*)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^# (.*)$/gm, '<h2>$1</h2>');
+  // Tables: lines with | ... |
+  html = html.replace(/((?:^|\n)\|[^\n]+\|\n\|[\s\-:|]+\|\n(?:\|[^\n]+\|\n?)+)/g, (tableBlock) => {
+    const rows = tableBlock.trim().split('\n');
+    if (rows.length < 2) return tableBlock;
+    const headerCols = rows[0].split('|').slice(1, -1).map(c => `<th>${c.trim()}</th>`).join('');
+    const bodyRows = rows.slice(2).map(r => {
+      const cols = r.split('|').slice(1, -1).map(c => `<td>${c.trim()}</td>`).join('');
+      return `<tr>${cols}</tr>`;
+    }).join('');
+    return `<div class="table-container"><table class="markdown-table"><thead><tr>${headerCols}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+  });
 
-  // Bold & Italic
+  // Blockquotes: lines starting with > or &gt;
+  html = html.replace(/(?:^|\n)(?:&gt;|>)\s*([^\n]+)/g, '<blockquote>$1</blockquote>');
+
+  // Horizontal rules: --- or *** or ___
+  html = html.replace(/^(?:[\t ]*[-*_]){3,}[\t ]*$/gm, '<hr class="markdown-hr">');
+
+  // Headers (Level 6 down to 1)
+  html = html.replace(/^(?:&lt;br&gt;|\n)*######[\t ]+([^\n]+)$/gm, '<h6>$1</h6>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*#####[\t ]+([^\n]+)$/gm, '<h5>$1</h5>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*####[\t ]+([^\n]+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*###[\t ]+([^\n]+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*##[\t ]+([^\n]+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^(?:&lt;br&gt;|\n)*#[\t ]+([^\n]+)$/gm, '<h1>$1</h1>');
+
+  // Numbered lists: 1. item
+  html = html.replace(/((?:(?:^|\n)\s*\d+\.\s+[^\n]+)+)/g, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      return line.replace(/^\s*\d+\.\s+(.*)$/, '<li>$1</li>');
+    }).join('');
+    return `<ol class="markdown-ol">${items}</ol>`;
+  });
+
+  // Bulleted lists: - item or * item
+  html = html.replace(/((?:(?:^|\n)\s*[-*+]\s+[^\n]+)+)/g, (match) => {
+    const items = match.trim().split('\n').map(line => {
+      return line.replace(/^\s*[-*+]\s+(.*)$/, '<li>$1</li>');
+    }).join('');
+    return `<ul class="markdown-ul">${items}</ul>`;
+  });
+
+  // Bold & Italic (both * and _)
+  html = html.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
 
-  // Lists
-  html = html.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>');
-  html = html.replace(/((?:<li>.*?<\/li>\s*)+)/g, '<ul>$1</ul>');
+  // Strikethrough
+  html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
 
   // Paragraphs & Linebreaks
   html = html.replace(/\n\n+/g, '</p><p>');
   html = html.replace(/\n/g, '<br>');
 
-  // 4. Restore Code & Math with callback functions to prevent regex $ substitution bugs
+  // Clean up any empty paragraph tags wrapping block elements
+  html = html.replace(/<p>\s*(<(?:h[1-6]|div|table|ul|ol|blockquote|hr)[^>]*>)/gi, '$1');
+  html = html.replace(/(<\/(?:h[1-6]|div|table|ul|ol|blockquote|hr)>)\s*<\/p>/gi, '$1');
+
+  // 4. Restore Code & Math using split().join() with underscore-free placeholders
   mathBlocks.forEach((renderedMath, i) => {
-    html = html.replace(new RegExp(`%%MATH_BLOCK_${i}%%`, 'g'), () => renderedMath);
-    html = html.replace(new RegExp(`%%MATH_INLINE_${i}%%`, 'g'), () => renderedMath);
+    html = html.split(`@@MATHBLOCK${i}@@`).join(renderedMath);
+    html = html.split(`@@MATHINLINE${i}@@`).join(renderedMath);
   });
 
   codeBlocks.forEach((renderedCode, i) => {
-    html = html.replace(new RegExp(`%%CODE_BLOCK_${i}%%`, 'g'), () => renderedCode);
-    html = html.replace(new RegExp(`%%CODE_INLINE_${i}%%`, 'g'), () => renderedCode);
+    html = html.split(`@@CODEBLOCK${i}@@`).join(renderedCode);
+    html = html.split(`@@CODEINLINE${i}@@`).join(renderedCode);
   });
 
   return `<div class="markdown-body"><p>${html}</p></div>`;
@@ -1440,6 +1555,12 @@ async function loadConversations() {
     const data = await res.json();
     state.conversations = data.conversations || [];
     renderConversationsList();
+
+    // Auto-restore active conversation if available
+    const savedConvId = localStorage.getItem('oryqen_current_conv_id');
+    if (savedConvId && !state.currentConversationId && state.conversations.some(c => c.id === savedConvId)) {
+      openConversation(savedConvId);
+    }
   } catch (err) {}
 }
 
@@ -1477,6 +1598,7 @@ function renderConversationsList() {
 
 async function openConversation(convId) {
   state.currentConversationId = convId;
+  localStorage.setItem('oryqen_current_conv_id', convId);
   try {
     const res = await fetch(`${API_BASE}/api/conversations/${convId}`);
     if (!res.ok) return;
@@ -1761,6 +1883,41 @@ function setupModals() {
   document.getElementById('registerForm')?.addEventListener('submit', handleRegister);
   document.getElementById('profileForm')?.addEventListener('submit', handleProfileUpdate);
 
+  // OTP Verification Controls
+  document.getElementById('submitOtpBtn')?.addEventListener('click', handleVerifyOtp);
+  document.getElementById('resendOtpBtn')?.addEventListener('click', handleResendOtp);
+  document.getElementById('backToLoginFromOtpBtn')?.addEventListener('click', () => switchAuthTab('login'));
+
+  // Admin Dashboard Controls
+  document.getElementById('openAdminModalBtn')?.addEventListener('click', () => {
+    document.getElementById('adminLoginModal')?.classList.remove('hidden');
+    document.getElementById('adminPasscodeInput')?.focus();
+  });
+  document.getElementById('closeAdminLoginBtn')?.addEventListener('click', () => {
+    document.getElementById('adminLoginModal')?.classList.add('hidden');
+  });
+  document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
+
+  document.getElementById('closeAdminModalBtn')?.addEventListener('click', () => {
+    document.getElementById('adminModal')?.classList.add('hidden');
+  });
+  document.getElementById('dismissAdminBtn')?.addEventListener('click', () => {
+    document.getElementById('adminModal')?.classList.add('hidden');
+  });
+  document.getElementById('refreshAdminStatsBtn')?.addEventListener('click', loadAdminTelemetry);
+  document.getElementById('saveAdminRoutingBtn')?.addEventListener('click', handleSaveAdminRouting);
+
+  // Admin Navigation Tabs
+  document.querySelectorAll('.admin-nav-item').forEach(nav => {
+    nav.addEventListener('click', () => {
+      document.querySelectorAll('.admin-nav-item').forEach(n => n.classList.remove('active'));
+      document.querySelectorAll('.admin-tab-pane').forEach(p => p.classList.remove('active'));
+      nav.classList.add('active');
+      const targetPane = document.getElementById(`admin-pane-${nav.dataset.adminTab}`);
+      targetPane?.classList.add('active');
+    });
+  });
+
   // Settings Modal Controls
   document.getElementById('openSettingsBtn')?.addEventListener('click', openSettingsModal);
   document.getElementById('closeSettingsBtn')?.addEventListener('click', () => document.getElementById('settingsModal')?.classList.add('hidden'));
@@ -1836,7 +1993,7 @@ function setupModals() {
     if (profileDropdown && !profileDropdown.contains(e.target) && !userPill?.contains(e.target)) {
       profileDropdown.classList.add('hidden');
     }
-    ['docsModal', 'settingsModal', 'citationModal', 'quizModal', 'flashcardModal', 'studentDashboardModal', 'memoryModal', 'subscriptionModal', 'authModal', 'supabaseModal'].forEach(id => {
+    ['docsModal', 'settingsModal', 'citationModal', 'quizModal', 'flashcardModal', 'studentDashboardModal', 'memoryModal', 'subscriptionModal', 'authModal', 'supabaseModal', 'adminLoginModal', 'adminModal'].forEach(id => {
       const modal = document.getElementById(id);
       if (e.target === modal) modal.classList.add('hidden');
     });
@@ -2054,18 +2211,203 @@ async function handleRegister(e) {
   const email = document.getElementById('regEmail')?.value;
   const password = document.getElementById('regPassword')?.value;
   const education_level = document.getElementById('regLevel')?.value;
+  let pendingRegistrationEmail = '';
+
   try {
     const res = await fetch(`${API_BASE}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password, education_level }),
     });
-    if (!res.ok) throw new Error('Registration failed');
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Registration failed');
+    }
+    const data = await res.json();
+
+    if (data.status === 'pending_verification') {
+      pendingRegistrationEmail = data.email || email;
+      document.getElementById('registerForm')?.classList.add('hidden');
+      document.getElementById('loginForm')?.classList.add('hidden');
+      document.getElementById('profileForm')?.classList.add('hidden');
+      document.getElementById('otpVerifyPanel')?.classList.remove('hidden');
+
+      const targetEmailEl = document.getElementById('otpTargetEmail');
+      if (targetEmailEl) targetEmailEl.textContent = pendingRegistrationEmail;
+
+      const directLink = document.getElementById('otpDirectConfirmLink');
+      if (directLink && data.confirmation_link) {
+        directLink.href = data.confirmation_link;
+      }
+
+      const otpInput = document.getElementById('otpInput');
+      if (otpInput && data.otp_preview) {
+        otpInput.value = data.otp_preview; // Convenient auto-fill for instant verification
+      }
+
+      showToast(`Verification code: ${data.otp_preview || 'Sent to email'}`, 'info');
+    } else {
+      state.user = data.user;
+      localStorage.setItem('oryqen_user_session', JSON.stringify(state.user));
+      showToast(`Account created! Welcome, ${state.user.name}!`);
+      document.getElementById('authModal')?.classList.add('hidden');
+      loadCurrentUser();
+      loadConversations();
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleVerifyOtp() {
+  const otpInput = document.getElementById('otpInput');
+  const otp = otpInput ? otpInput.value.trim() : '';
+  const email = document.getElementById('otpTargetEmail')?.textContent || document.getElementById('regEmail')?.value.trim();
+
+  if (!otp || otp.length < 6) {
+    showToast('Please enter your 6-digit verification code.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Verification failed');
+    }
     const data = await res.json();
     state.user = data.user;
-    showToast(`Account created! Welcome, ${state.user.name}!`);
+    localStorage.setItem('oryqen_user_session', JSON.stringify(state.user));
+    showToast('Account confirmed and active!');
     document.getElementById('authModal')?.classList.add('hidden');
     loadCurrentUser();
+    loadConversations();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleResendOtp() {
+  const email = document.getElementById('otpTargetEmail')?.textContent || document.getElementById('regEmail')?.value.trim();
+  if (!email) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/resend-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error('Resend failed');
+    const data = await res.json();
+
+    const directLink = document.getElementById('otpDirectConfirmLink');
+    if (directLink && data.confirmation_link) {
+      directLink.href = data.confirmation_link;
+    }
+    const otpInput = document.getElementById('otpInput');
+    if (otpInput && data.otp_preview) {
+      otpInput.value = data.otp_preview;
+    }
+    showToast(`New verification code: ${data.otp_preview || 'Dispatched'}`, 'info');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ==========================================================================
+// Dedicated Admin Operations & Telemetry
+// ==========================================================================
+let adminSessionKey = sessionStorage.getItem('oryqen_admin_key') || '';
+
+async function handleAdminLogin(e) {
+  e.preventDefault();
+  const passInput = document.getElementById('adminPasscodeInput');
+  const passcode = passInput ? passInput.value.trim() : '';
+  if (!passcode) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passcode }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Invalid Master Passcode');
+    }
+
+    adminSessionKey = passcode;
+    sessionStorage.setItem('oryqen_admin_key', passcode);
+    document.getElementById('adminLoginModal')?.classList.add('hidden');
+    if (passInput) passInput.value = '';
+    showToast('Admin access granted.');
+    openAdminModal();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function openAdminModal() {
+  document.getElementById('adminModal')?.classList.remove('hidden');
+  loadAdminTelemetry();
+}
+
+async function loadAdminTelemetry() {
+  if (!adminSessionKey) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/system-stats`, {
+      headers: { 'X-Admin-Key': adminSessionKey }
+    });
+    if (!res.ok) throw new Error('Telemetry retrieval unauthorized');
+    const data = await res.json();
+
+    const setTxt = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val !== undefined && val !== null ? val : '—';
+    };
+
+    const db = data.database || {};
+    const ai = data.ai_engines || {};
+
+    setTxt('adminTotalUsers', db.users_count || 0);
+    setTxt('adminTotalConvs', db.conversations_count || 0);
+    setTxt('adminTotalMsgs', db.messages_count || 0);
+    setTxt('adminTotalDocs', db.materials_count || 0);
+    setTxt('adminDbStatus', db.supabase_configured ? 'Supabase Connected' : 'SQLite WAL (Active)');
+    setTxt('adminVectorChunks', db.indexed_vector_chunks || 0);
+
+    setTxt('adminMaskedOpenRouter', ai.openrouter_key_masked || 'Not Configured');
+    setTxt('adminMaskedGemini', ai.gemini_key_masked || 'Not Configured');
+    setTxt('adminMaskedSupabase', db.supabase_url || 'Not Configured');
+
+    showToast('Admin telemetry refreshed.');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handleSaveAdminRouting(e) {
+  e.preventDefault();
+  if (!adminSessionKey) return;
+  const defaultModel = document.getElementById('adminDefaultModelSelect')?.value;
+  const streamResponses = document.getElementById('adminStreamToggle')?.checked;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Key': adminSessionKey
+      },
+      body: JSON.stringify({ default_model: defaultModel, stream_responses: streamResponses })
+    });
+    if (!res.ok) throw new Error('Failed to update system routing');
+    showToast('System AI routing configuration updated.');
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2100,6 +2442,8 @@ function updateAuthHeader() {
   const userPill = document.getElementById('userProfilePill');
   const isGuest = !state.user || state.user.id.startsWith('guest-') || state.user.id === 'local-user';
 
+  const headerIcon = document.getElementById('headerDefaultUserIcon');
+  const headerInit = document.getElementById('headerUserInitial');
   const headerAvatar = document.getElementById('headerUserAvatar');
   const headerName = document.getElementById('headerUserName');
 
@@ -2107,14 +2451,21 @@ function updateAuthHeader() {
     guestBtns?.classList.remove('hidden');
     userPill?.classList.add('hidden');
     document.getElementById('authTabProfile')?.classList.add('hidden');
-    if (headerAvatar) headerAvatar.textContent = 'G';
-    if (headerName) headerName.textContent = 'Sign In';
+    if (headerIcon) headerIcon.classList.remove('hidden');
+    if (headerInit) headerInit.classList.add('hidden');
+    if (headerAvatar) headerAvatar.textContent = '';
+    if (headerName) headerName.textContent = 'Account';
   } else {
     guestBtns?.classList.add('hidden');
     userPill?.classList.remove('hidden');
     document.getElementById('authTabProfile')?.classList.remove('hidden');
     const firstName = (state.user.name || 'Scholar').split(' ')[0];
     const userInit = (state.user.name || 'S')[0].toUpperCase();
+    if (headerIcon) headerIcon.classList.add('hidden');
+    if (headerInit) {
+      headerInit.textContent = userInit;
+      headerInit.classList.remove('hidden');
+    }
     if (headerAvatar) headerAvatar.textContent = userInit;
     if (headerName) headerName.textContent = firstName;
 
@@ -2194,6 +2545,7 @@ function switchAuthTab(tab) {
   document.getElementById('loginForm')?.classList.toggle('hidden', tab !== 'login');
   document.getElementById('registerForm')?.classList.toggle('hidden', tab !== 'register');
   document.getElementById('profileForm')?.classList.toggle('hidden', tab !== 'profile');
+  document.getElementById('otpVerifyPanel')?.classList.add('hidden');
 
   const titleEl = document.getElementById('authModalTitle');
   const subEl = document.getElementById('authModalSubtitle');

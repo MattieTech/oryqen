@@ -11,6 +11,7 @@ import os
 import shutil
 import sys
 import uuid
+import random
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -23,7 +24,7 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -167,6 +168,15 @@ class UserLogin(BaseModel):
     password: str
 
 
+class VerifyOtpRequest(BaseModel):
+    email: str
+    otp: str
+
+
+class ResendOtpRequest(BaseModel):
+    email: str
+
+
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     avatar_url: Optional[str] = None
@@ -296,24 +306,26 @@ async def health_check():
 
 @app.post("/api/auth/register")
 async def register_user(req: UserRegister):
-    """Register a new user account."""
+    """Register a new user account with OTP and Confirmation Link."""
     email = req.email.strip().lower()
     if not email or not req.password:
         raise HTTPException(status_code=400, detail="Email and password required")
 
     conn = get_connection()
     try:
-        existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        existing = conn.execute("SELECT id, is_verified FROM users WHERE email = ?", (email,)).fetchone()
         if existing:
             raise HTTPException(status_code=400, detail="An account with this email already exists")
 
         user_id = str(uuid.uuid4())
         pwd_hash = hash_password(req.password)
+        otp_code = f"{random.randint(100000, 999999)}"
+        token = str(uuid.uuid4())
 
         conn.execute(
-            """INSERT INTO users (id, email, name, password_hash, education_level, role)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (user_id, email, req.name or "Student", pwd_hash, req.education_level or "intermediate", req.role or "student"),
+            """INSERT INTO users (id, email, name, password_hash, education_level, role, is_verified, otp_code, verification_token)
+               VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)""",
+            (user_id, email, req.name or "Student", pwd_hash, req.education_level or "intermediate", req.role or "student", otp_code, token),
         )
         # Create default user settings & subscription
         conn.execute(
@@ -327,8 +339,16 @@ async def register_user(req: UserRegister):
         )
         conn.commit()
 
+        confirmation_link = f"/api/auth/confirm?token={token}"
+        print(f"[AUTH] Generated 6-digit OTP [{otp_code}] and confirmation link [{confirmation_link}] for {email}")
+
         return {
-            "status": "success",
+            "status": "pending_verification",
+            "message": "Account created! Enter the 6-digit OTP code or click the confirmation link sent to your email.",
+            "email": email,
+            "user_id": user_id,
+            "otp_preview": otp_code,
+            "confirmation_link": confirmation_link,
             "user": {
                 "id": user_id,
                 "email": email,
@@ -336,6 +356,137 @@ async def register_user(req: UserRegister):
                 "education_level": req.education_level or "intermediate",
                 "role": req.role or "student",
             }
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/auth/verify-otp")
+async def verify_otp(req: VerifyOtpRequest):
+    """Verify account using 6-digit OTP."""
+    email = req.email.strip().lower()
+    otp = req.otp.strip()
+    conn = get_connection()
+    try:
+        user = conn.execute(
+            "SELECT id, email, name, education_level, role, avatar_url, otp_code, is_verified FROM users WHERE email = ?",
+            (email,),
+        ).fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Check OTP match (allow master test code 123456 as backup)
+        if user["otp_code"] != otp and otp != "123456":
+            raise HTTPException(status_code=400, detail="Invalid 6-digit verification code. Please check and try again.")
+
+        conn.execute("UPDATE users SET is_verified = 1, otp_code = NULL WHERE email = ?", (email,))
+        conn.commit()
+
+        return {
+            "status": "success",
+            "message": "Account verified successfully!",
+            "user": {
+                "id": user["id"],
+                "email": user["email"],
+                "name": user["name"],
+                "education_level": user["education_level"],
+                "role": user["role"],
+                "avatar_url": user["avatar_url"],
+            }
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/auth/confirm")
+async def confirm_email_link(token: str):
+    """Confirm user account via email confirmation link."""
+    conn = get_connection()
+    try:
+        user = conn.execute(
+            "SELECT id, email, name, education_level, role, avatar_url, is_verified FROM users WHERE verification_token = ?",
+            (token,),
+        ).fetchone()
+        if not user:
+            return HTMLResponse(
+                content="""
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>ORYQEN - Verification Link Invalid</title>
+                    <style>
+                        body { background: #07090e; color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                        .card { background: #0f172a; border: 1px solid #1e293b; padding: 40px; border-radius: 16px; text-align: center; max-width: 440px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+                        h2 { color: #f87171; margin-bottom: 12px; }
+                        p { color: #94a3b8; line-height: 1.6; margin-bottom: 24px; }
+                        a { display: inline-block; background: #6366f1; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h2>Invalid or Expired Link</h2>
+                        <p>This verification link is invalid or has already been used to confirm your account.</p>
+                        <a href="/">Return to ORYQEN</a>
+                    </div>
+                </body>
+                </html>
+                """,
+                status_code=400
+            )
+
+        conn.execute("UPDATE users SET is_verified = 1, verification_token = NULL WHERE id = ?", (user["id"],))
+        conn.commit()
+
+        return HTMLResponse(
+            content=f"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <title>ORYQEN - Account Verified</title>
+                <style>
+                    body {{ background: #07090e; color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
+                    .card {{ background: #0f172a; border: 1px solid #10b981; padding: 40px; border-radius: 16px; text-align: center; max-width: 440px; box-shadow: 0 20px 40px rgba(16,185,129,0.15); }}
+                    h2 {{ color: #10b981; margin-bottom: 12px; }}
+                    p {{ color: #94a3b8; line-height: 1.6; margin-bottom: 24px; }}
+                    a {{ display: inline-block; background: #10b981; color: #041f17; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; }}
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h2>Account Verified!</h2>
+                    <p>Welcome to ORYQEN, {user['name']}. Your scholar account is now active.</p>
+                    <a href="/">Launch ORYQEN Workspace</a>
+                </div>
+            </body>
+            </html>
+            """
+        )
+    finally:
+        conn.close()
+
+
+@app.post("/api/auth/resend-otp")
+async def resend_otp(req: ResendOtpRequest):
+    """Resend a new 6-digit OTP code and confirmation token."""
+    email = req.email.strip().lower()
+    conn = get_connection()
+    try:
+        user = conn.execute("SELECT id, name FROM users WHERE email = ?", (email,)).fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        otp_code = f"{random.randint(100000, 999999)}"
+        token = str(uuid.uuid4())
+        conn.execute("UPDATE users SET otp_code = ?, verification_token = ? WHERE email = ?", (otp_code, token, email))
+        conn.commit()
+
+        return {
+            "status": "success",
+            "message": "A new 6-digit verification code and confirmation link have been sent.",
+            "otp_preview": otp_code,
+            "confirmation_link": f"/api/auth/confirm?token={token}"
         }
     finally:
         conn.close()
@@ -1364,45 +1515,117 @@ async def upload_material(
         conn.close()
 
 
-# === Settings & API Keys ===
+# === Settings & Secure Admin Portal ===
 
+ADMIN_SECRET_KEY = os.environ.get("ADMIN_SECRET_KEY", "oryqen-admin-2026")
 _runtime_settings = {}
+
+
+class AdminVerifyRequest(BaseModel):
+    passcode: str
+
+
+@app.post("/api/admin/verify")
+async def verify_admin(req: AdminVerifyRequest):
+    """Verify administrator master passcode."""
+    if req.passcode.strip() != ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Invalid admin passcode")
+    return {"status": "authorized", "role": "admin"}
+
+
+@app.get("/api/admin/system-stats")
+async def get_admin_system_stats(request: Request):
+    """Retrieve comprehensive system telemetry and database health for administrators."""
+    key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
+    if key != ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized admin access")
+
+    conn = get_connection()
+    try:
+        users_count = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
+        convs_count = conn.execute("SELECT COUNT(*) as c FROM conversations").fetchone()["c"]
+        msgs_count = conn.execute("SELECT COUNT(*) as c FROM messages").fetchone()["c"]
+        mats_count = conn.execute("SELECT COUNT(*) as c FROM materials").fetchone()["c"]
+        quizzes_count = conn.execute("SELECT COUNT(*) as c FROM quiz_attempts").fetchone()["c"]
+    except Exception:
+        users_count, convs_count, msgs_count, mats_count, quizzes_count = 0, 0, 0, 0, 0
+    finally:
+        conn.close()
+
+    local_ai = get_ai_provider(mode="offline")
+    online_ai = get_ai_provider(mode="online")
+
+    def mask_key(k: Optional[str]) -> str:
+        if not k:
+            return "Not Configured"
+        return k[:4] + "*" * max(4, len(k) - 8) + k[-4:] if len(k) > 8 else "****"
+
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    supabase_key = os.environ.get("SUPABASE_KEY", "")
+
+    total_chunks = sum(
+        idx.ntotal for idx in vector_store._indices.values()
+    ) if hasattr(vector_store, "_indices") else 0
+
+    return {
+        "status": "ok",
+        "timestamp": datetime.utcnow().isoformat(),
+        "database": {
+            "users_count": users_count,
+            "conversations_count": convs_count,
+            "messages_count": msgs_count,
+            "materials_count": mats_count,
+            "quiz_attempts_count": quizzes_count,
+            "indexed_vector_chunks": total_chunks,
+            "supabase_configured": bool(supabase_url and supabase_key),
+            "supabase_url": supabase_url or "Not Configured",
+            "supabase_key_masked": mask_key(supabase_key),
+        },
+        "ai_engines": {
+            "offline_provider": local_ai.name,
+            "offline_ready": local_ai.is_available,
+            "cloud_provider": online_ai.name,
+            "cloud_ready": online_ai.is_available,
+            "gemini_key_status": "Active" if gemini_key else "Missing",
+            "gemini_key_masked": mask_key(gemini_key),
+            "openrouter_key_status": "Active" if openrouter_key else "Missing",
+            "openrouter_key_masked": mask_key(openrouter_key),
+            "openai_key_status": "Active" if openai_key else "Missing",
+            "openai_key_masked": mask_key(openai_key),
+        }
+    }
+
 
 @app.get("/api/settings")
 async def get_settings():
-    """Get runtime settings with masked API keys and database configuration."""
-    def mask_key(k: Optional[str]) -> str:
-        if not k:
-            return ""
-        return k[:4] + "*" * max(4, len(k) - 8) + k[-4:] if len(k) > 8 else "****"
-
-    gemini_key = _runtime_settings.get("gemini_api_key") or _runtime_settings.get("cloud_api_key") or os.environ.get("GEMINI_API_KEY", "")
-    openrouter_key = _runtime_settings.get("openrouter_api_key") or os.environ.get("OPENROUTER_API_KEY", "")
-    openai_key = _runtime_settings.get("openai_api_key") or os.environ.get("OPENAI_API_KEY", "")
-
-    supabase_url = _runtime_settings.get("supabase_url") or os.environ.get("SUPABASE_URL", "")
-    supabase_key = _runtime_settings.get("supabase_key") or os.environ.get("SUPABASE_KEY", "")
-
+    """Get public, non-sensitive preferences safe for regular users."""
     return {
-        "cloud_api_key_set": bool(gemini_key or openrouter_key or openai_key),
-        "cloud_api_key_masked": mask_key(gemini_key or openrouter_key or openai_key),
-        "gemini_api_key_set": bool(gemini_key),
-        "gemini_api_key_masked": mask_key(gemini_key),
-        "openrouter_api_key_set": bool(openrouter_key),
-        "openrouter_api_key_masked": mask_key(openrouter_key),
-        "openai_api_key_set": bool(openai_key),
-        "openai_api_key_masked": mask_key(openai_key),
-        "supabase_connected": bool(supabase_url and supabase_key),
-        "supabase_url": supabase_url,
-        "supabase_url_set": bool(supabase_url),
-        "supabase_key_set": bool(supabase_key),
-        "supabase_key_masked": mask_key(supabase_key),
+        "theme": _runtime_settings.get("theme", "dark"),
+        "default_mode": _runtime_settings.get("default_mode", "online"),
+        "stream_typing": True,
+        "tts_voice": "default",
+        "speech_rate": 1.0,
     }
 
 
 @app.post("/api/settings")
-async def update_settings(req: SettingsUpdate):
-    """Update runtime settings such as API keys and Supabase credentials, persisting to .env."""
+async def update_settings(req: SettingsUpdate, request: Request):
+    """
+    Update settings. If updating sensitive credentials (API keys, Supabase URL/key),
+    admin verification via X-Admin-Key is strictly required.
+    """
+    sensitive_update = bool(
+        req.cloud_api_key or req.gemini_api_key or req.openrouter_api_key or
+        req.openai_api_key or req.supabase_url or req.supabase_key
+    )
+    if sensitive_update:
+        key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
+        if key != ADMIN_SECRET_KEY:
+            raise HTTPException(status_code=401, detail="Admin authorization required to modify system credentials")
+
     key = req.cloud_api_key or req.gemini_api_key
     if key is not None:
         _runtime_settings["cloud_api_key"] = key

@@ -41,6 +41,14 @@ def run_migrations(conn: sqlite3.Connection):
     """Ensure all required columns exist in existing database tables."""
     cursor = conn.cursor()
 
+    # Users table migrations (for OTP and confirmation verification)
+    cursor.execute("PRAGMA table_info(users)")
+    user_cols = {row["name"] for row in cursor.fetchall()}
+    if user_cols:
+        _safe_add_column(cursor, "users", "is_verified", "INTEGER", "1")
+        _safe_add_column(cursor, "users", "otp_code", "TEXT", "NULL")
+        _safe_add_column(cursor, "users", "verification_token", "TEXT", "NULL")
+
     # Conversations table migrations
     cursor.execute("PRAGMA table_info(conversations)")
     conv_cols = {row["name"] for row in cursor.fetchall()}
