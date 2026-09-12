@@ -22,6 +22,9 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
 if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
+import socket
+import httpx
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
@@ -37,6 +40,8 @@ from .services.llm import (
     get_oryqen_model_id,
     get_system_prompt,
     GENERAL_SYSTEM_PROMPT,
+    is_ollama_port_open,
+    ensure_ollama_active,
 )
 from .services.pdf_processor import process_pdf
 from .services.rag import ask_assistant, generate_quiz
@@ -254,6 +259,14 @@ class SettingsUpdate(BaseModel):
     education_level: Optional[str] = None
 
 
+class ModelPullRequest(BaseModel):
+    name: str
+
+
+class ModelSelectRequest(BaseModel):
+    name: str
+
+
 # === Helper Functions ===
 
 def hash_password(password: str) -> str:
@@ -300,6 +313,180 @@ async def health_check():
         "developer": "SyntaxNexus Developer (MattieTech)",
         "lead": "Matthew Aliu",
     }
+
+
+# === Intelligent Model Management System ===
+
+@app.get("/api/models")
+async def list_models():
+    """List available online models and installed/available local models with storage telemetry."""
+    cloud_models = [
+        {
+            "id": "oryqen-swift",
+            "name": "ORYQEN Swift",
+            "provider": "Google Gemini & OpenRouter",
+            "description": "Ultra-fast multimodal reasoning, coding, analysis, and research.",
+            "mode": "online",
+            "badge": "Fast & Smart",
+        },
+        {
+            "id": "oryqen-reason",
+            "name": "ORYQEN Reason",
+            "provider": "Gemini 2.5 Pro & Claude 3.5 Sonnet",
+            "description": "Deep academic problem-solving, advanced mathematics, and research synthesis.",
+            "mode": "online",
+            "badge": "Deep Thought",
+        },
+    ]
+
+    installed_local = []
+    ollama_online = is_ollama_port_open()
+    if not ollama_online:
+        ollama_online = ensure_ollama_active()
+
+    if ollama_online:
+        try:
+            import ollama
+            tag_models = ollama.list().models
+            for m in tag_models:
+                m_name = getattr(m, "model", "") or getattr(m, "name", "")
+                m_size = getattr(m, "size", 0) or 0
+                details = getattr(m, "details", None)
+                param_size = getattr(details, "parameter_size", "Unknown") if details else "Unknown"
+                quant = getattr(details, "quantization_level", "Unknown") if details else "Unknown"
+                family = getattr(details, "family", "Unknown") if details else "Unknown"
+                is_embed = any(k in m_name.lower() for k in ["embed", "bge", "bert"])
+                installed_local.append({
+                    "name": m_name,
+                    "display_name": get_oryqen_model_name(m_name),
+                    "size_bytes": m_size,
+                    "size_mb": round(m_size / (1024 * 1024), 1),
+                    "parameter_size": param_size,
+                    "quantization": quant,
+                    "family": family,
+                    "is_embedding": is_embed,
+                    "installed": True,
+                })
+        except Exception:
+            pass
+
+    recommended_catalog = [
+        {
+            "name": "qwen2.5:0.5b",
+            "display_name": "ORYQEN Local Core (Ultra-Light)",
+            "size_mb": 398,
+            "description": "Compact, high-speed on-device model. Instant startup on all PCs and laptops.",
+            "recommended": True,
+            "installed": any(m["name"] == "qwen2.5:0.5b" for m in installed_local),
+        },
+        {
+            "name": "qwen2.5:1.5b",
+            "display_name": "ORYQEN Local Core Plus",
+            "size_mb": 986,
+            "description": "Enhanced language and code reasoning while staying under 1 GB RAM.",
+            "recommended": False,
+            "installed": any(m["name"] == "qwen2.5:1.5b" for m in installed_local),
+        },
+        {
+            "name": "llama3.2:1b",
+            "display_name": "ORYQEN Local Llama",
+            "size_mb": 1300,
+            "description": "Meta Llama 3.2 on-device edge model for creative writing and summarization.",
+            "recommended": False,
+            "installed": any(m["name"] == "llama3.2:1b" for m in installed_local),
+        },
+        {
+            "name": "qwen2.5:3b",
+            "display_name": "ORYQEN Local Core Pro",
+            "size_mb": 2100,
+            "description": "Heavy-duty local intelligence for advanced mathematics and complex STEM problems.",
+            "recommended": False,
+            "installed": any(m["name"] == "qwen2.5:3b" for m in installed_local),
+        },
+    ]
+
+    active_local = next((m["name"] for m in installed_local if not m.get("is_embedding")), "qwen2.5:0.5b")
+
+    return {
+        "cloud_models": cloud_models,
+        "installed_local_models": installed_local,
+        "recommended_catalog": recommended_catalog,
+        "active_local_model": active_local,
+        "ollama_active": ollama_online,
+        "storage_used_mb": sum(m["size_mb"] for m in installed_local),
+    }
+
+
+@app.get("/api/models/status")
+async def model_status():
+    """Return explicit, honest network, model availability, and inference status."""
+    local_ai = get_ai_provider(mode="offline")
+    online_ai = get_ai_provider(mode="online")
+    ollama_ok = is_ollama_port_open()
+
+    has_internet = False
+    try:
+        with socket.create_connection(("8.8.8.8", 53), timeout=1.0):
+            has_internet = True
+    except Exception:
+        pass
+
+    inference_mode = "offline_ai_unavailable"
+    if has_internet and online_ai.is_available:
+        inference_mode = "online_cloud"
+    elif ollama_ok and local_ai.is_available:
+        inference_mode = "offline_local_model"
+
+    return {
+        "has_internet": has_internet,
+        "ollama_daemon_active": ollama_ok,
+        "local_model_available": local_ai.is_available,
+        "active_local_model": local_ai.display_name,
+        "active_cloud_model": online_ai.display_name,
+        "inference_mode": inference_mode,
+        "online_ready": online_ai.is_available and has_internet,
+    }
+
+
+@app.post("/api/models/pull")
+async def pull_model(req: ModelPullRequest):
+    """Pull a model from the Ollama library with SSE progress streaming."""
+    model_name = req.name.strip()
+    if not is_ollama_port_open():
+        ensure_ollama_active()
+    if not is_ollama_port_open():
+        raise HTTPException(status_code=503, detail="Ollama local AI daemon is not active.")
+
+    async def stream_pull():
+        try:
+            async with httpx.AsyncClient(timeout=1800.0) as client:
+                async with client.stream("POST", "http://127.0.0.1:11434/api/pull", json={"name": model_name, "stream": True}) as r:
+                    async for line in r.aiter_lines():
+                        if line:
+                            yield f"data: {line}\n\n"
+            yield 'data: {"status": "success", "done": true}\n\n'
+        except Exception as e:
+            yield f'data: {{"status": "error", "error": "{str(e)}"}}\n\n'
+
+    return StreamingResponse(stream_pull(), media_type="text/event-stream")
+
+
+@app.delete("/api/models/{model_name}")
+async def delete_model(model_name: str):
+    """Delete an installed local model to free disk storage."""
+    if not is_ollama_port_open():
+        ensure_ollama_active()
+    if not is_ollama_port_open():
+        raise HTTPException(status_code=503, detail="Ollama local AI daemon is not active")
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.request("DELETE", "http://127.0.0.1:11434/api/delete", json={"name": model_name})
+            if res.status_code == 200:
+                return {"status": "success", "deleted": model_name}
+            raise HTTPException(status_code=res.status_code, detail=res.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete model: {str(e)}")
 
 
 # === Authentication & User Accounts ===
@@ -934,6 +1121,8 @@ async def chat_stream_endpoint(request: ChatRequest):
                 full_answer.append(text_part)
                 payload = {
                     "chunk": text_part,
+                    "token": text_part,
+                    "content": text_part,
                     "model": get_oryqen_model_id(chunk.get("model", model_name)),
                     "display_name": chunk.get("display_name", get_oryqen_model_name(model_name)),
                     "done": chunk.get("done", False),
@@ -954,9 +1143,12 @@ async def chat_stream_endpoint(request: ChatRequest):
             finally:
                 c.close()
 
+            yield "data: [DONE]\n\n"
+
         except Exception as e:
-            err_payload = {"chunk": f"\n\n[Error: {str(e)}]", "done": True, "conversation_id": conv_id}
+            err_payload = {"chunk": f"\n\n[Error: {str(e)}]", "token": f"\n\n[Error: {str(e)}]", "content": f"\n\n[Error: {str(e)}]", "done": True, "conversation_id": conv_id}
             yield f"data: {json.dumps(err_payload)}\n\n"
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

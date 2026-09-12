@@ -222,17 +222,22 @@ def ensure_ollama_active() -> bool:
 
     if ollama_bin and os.path.exists(ollama_bin):
         try:
+            env = os.environ.copy()
+            env["OLLAMA_HOST"] = "127.0.0.1:11434"
             subprocess.Popen(
                 [ollama_bin, "serve"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                env=env,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
-            time.sleep(1.5)
-            return is_ollama_port_open()
+            for _ in range(8):
+                time.sleep(0.5)
+                if is_ollama_port_open():
+                    return True
         except Exception:
             pass
-    return False
+    return is_ollama_port_open()
 
 
 # =========================================================================
@@ -277,6 +282,7 @@ class LocalAIProvider(AIProvider):
 
     def __init__(self, model: Optional[str] = None):
         self.model = model or "qwen2.5:0.5b"
+        ensure_ollama_active()
         if not is_ollama_port_open():
             return
         try:
@@ -311,16 +317,25 @@ class LocalAIProvider(AIProvider):
             return False
 
     def _fallback_response(self, prompt: str, system: str = "", error_detail: str = "") -> str:
-        """Grounded on-device cognitive reasoning engine when local daemon is inactive."""
-        return synthesize_offline_response(prompt=prompt, system=system)
+        """Honest and transparent offline standby message when local daemon is inactive."""
+        return (
+            "⚠️ **Offline Neural Model Standby**\n\n"
+            "ORYQEN Local Core could not connect to a running local model on this device.\n\n"
+            "**To chat offline with genuine intelligence:**\n"
+            "1. Launch the local AI service using `start_oryqen.bat` or ensure the Ollama background daemon is running.\n"
+            "2. In **Settings → AI & Models**, verify that `qwen2.5:0.5b` (or another model) is installed.\n"
+            "3. If an internet connection is available, switch to **Online Mode** (top right) to chat using ORYQEN Swift."
+        )
 
     def generate(self, prompt: str, system: str = "", temperature: float = 0.7) -> dict:
+        ensure_ollama_active()
         if not is_ollama_port_open():
             return {
                 "content": self._fallback_response(prompt, system, error_detail="Ollama daemon is offline on port 11434"),
                 "model": self.name,
                 "display_name": "ORYQEN Local Core",
                 "done": True,
+                "offline_available": False,
             }
         import ollama
         messages = []
@@ -339,6 +354,7 @@ class LocalAIProvider(AIProvider):
                 "model": self.name,
                 "display_name": self.display_name,
                 "done": True,
+                "offline_available": True,
             }
         except Exception as e:
             return {
@@ -346,18 +362,24 @@ class LocalAIProvider(AIProvider):
                 "model": self.name,
                 "display_name": "ORYQEN Local Core",
                 "done": True,
+                "offline_available": False,
             }
 
     def stream(self, prompt: str, system: str = "", temperature: float = 0.7) -> Generator:
+        ensure_ollama_active()
         if not is_ollama_port_open():
             full_text = self._fallback_response(prompt, system, error_detail="Ollama daemon is offline on port 11434")
             words = full_text.split(" ")
             for i, word in enumerate(words):
+                token = word + (" " if i < len(words) - 1 else "")
                 yield {
-                    "content": word + (" " if i < len(words) - 1 else ""),
+                    "content": token,
+                    "chunk": token,
+                    "token": token,
                     "model": self.name,
                     "display_name": "ORYQEN Local Core",
                     "done": (i == len(words) - 1),
+                    "offline_available": False,
                 }
             return
         import ollama
@@ -373,24 +395,33 @@ class LocalAIProvider(AIProvider):
                 stream=True,
             )
             for chunk in stream_resp:
+                text = chunk.message.content
                 yield {
-                    "content": chunk.message.content,
+                    "content": text,
+                    "chunk": text,
+                    "token": text,
                     "model": self.name,
                     "display_name": self.display_name,
                     "done": getattr(chunk, "done", False),
+                    "offline_available": True,
                 }
         except Exception as e:
             full_text = self._fallback_response(prompt, system, error_detail=str(e))
             words = full_text.split(" ")
             for i, word in enumerate(words):
+                token = word + (" " if i < len(words) - 1 else "")
                 yield {
-                    "content": word + (" " if i < len(words) - 1 else ""),
+                    "content": token,
+                    "chunk": token,
+                    "token": token,
                     "model": self.name,
                     "display_name": "ORYQEN Local Core",
                     "done": (i == len(words) - 1),
+                    "offline_available": False,
                 }
 
     def chat(self, messages: list[dict], system: str = "", temperature: float = 0.7) -> dict:
+        ensure_ollama_active()
         last_prompt = messages[-1]["content"] if messages else ""
         if not is_ollama_port_open():
             return {
@@ -398,6 +429,7 @@ class LocalAIProvider(AIProvider):
                 "model": self.name,
                 "display_name": "ORYQEN Local Core",
                 "done": True,
+                "offline_available": False,
             }
         import ollama
         chat_messages = [{"role": "system", "content": system or GENERAL_SYSTEM_PROMPT}]
@@ -414,6 +446,7 @@ class LocalAIProvider(AIProvider):
                 "model": self.name,
                 "display_name": self.display_name,
                 "done": True,
+                "offline_available": True,
             }
         except Exception as e:
             return {
@@ -421,19 +454,25 @@ class LocalAIProvider(AIProvider):
                 "model": self.name,
                 "display_name": "ORYQEN Local Core",
                 "done": True,
+                "offline_available": False,
             }
 
     def chat_stream(self, messages: list[dict], system: str = "", temperature: float = 0.7) -> Generator:
+        ensure_ollama_active()
         last_prompt = messages[-1]["content"] if messages else ""
         if not is_ollama_port_open():
             full_text = self._fallback_response(last_prompt, system, error_detail="Ollama daemon is offline on port 11434")
             words = full_text.split(" ")
             for i, word in enumerate(words):
+                token = word + (" " if i < len(words) - 1 else "")
                 yield {
-                    "content": word + (" " if i < len(words) - 1 else ""),
+                    "content": token,
+                    "chunk": token,
+                    "token": token,
                     "model": self.name,
                     "display_name": "ORYQEN Local Core",
                     "done": (i == len(words) - 1),
+                    "offline_available": False,
                 }
             return
         import ollama
@@ -448,21 +487,29 @@ class LocalAIProvider(AIProvider):
                 stream=True,
             )
             for chunk in stream_resp:
+                text = chunk.message.content
                 yield {
-                    "content": chunk.message.content,
+                    "content": text,
+                    "chunk": text,
+                    "token": text,
                     "model": self.name,
                     "display_name": self.display_name,
                     "done": getattr(chunk, "done", False),
+                    "offline_available": True,
                 }
         except Exception as e:
             full_text = self._fallback_response(last_prompt, system, error_detail=str(e))
             words = full_text.split(" ")
             for i, word in enumerate(words):
+                token = word + (" " if i < len(words) - 1 else "")
                 yield {
-                    "content": word + (" " if i < len(words) - 1 else ""),
+                    "content": token,
+                    "chunk": token,
+                    "token": token,
                     "model": self.name,
                     "display_name": "ORYQEN Local Core",
                     "done": (i == len(words) - 1),
+                    "offline_available": False,
                 }
 
 
@@ -615,8 +662,11 @@ class CloudAIProvider(AIProvider):
                 words = content.split(" ")
                 def word_stream():
                     for i, w in enumerate(words):
+                        token = w + (" " if i < len(words) - 1 else "")
                         yield {
-                            "content": w + (" " if i < len(words) - 1 else ""),
+                            "content": token,
+                            "chunk": token,
+                            "token": token,
                             "model": "oryqen-swift",
                             "display_name": display,
                             "done": (i == len(words) - 1),

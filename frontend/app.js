@@ -60,6 +60,13 @@ const state = {
 // Initialization
 // ==========================================================================
 document.addEventListener('DOMContentLoaded', () => {
+  // Register PWA Service Worker for Offline Resilience & Fast Shell Caching
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('ORYQEN PWA ServiceWorker active:', reg.scope))
+      .catch(err => console.warn('PWA ServiceWorker note:', err.message));
+  }
+
   applyTheme(state.theme);
   setupWorkspaceSwitcher();
   setupNavigation();
@@ -78,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSubscriptionStatus();
   checkHealthStatus();
   updateOfflineSyncBadge();
+  updateHonestStatus();
 });
 
 // ==========================================================================
@@ -268,25 +276,88 @@ function setAiMode(mode) {
   document.getElementById('segModeOffline')?.classList.toggle('active', mode === 'offline');
   document.getElementById('segModeOnline')?.classList.toggle('active', mode === 'online');
 
+  updateHonestStatus();
+  showToast(mode === 'online' ? 'Switched to Online Cloud AI' : 'Switched to Offline Mode');
+}
+
+async function updateHonestStatus() {
   const statusBadge = document.getElementById('headerStatusBadge');
   const statusLabel = document.getElementById('headerStatusLabel');
   const sidebarStatus = document.getElementById('sidebarModeStatus');
   const footerText = document.getElementById('footerModeText');
 
-  if (mode === 'online') {
+  try {
+    const res = await fetch(`${API_BASE}/api/models/status`);
+    if (res.ok) {
+      const data = await res.json();
+      state.modelsStatus = data;
+
+      // Update Local Core status indicators in settings card if available
+      const localBadge = document.getElementById('localDaemonBadge');
+      const localTitle = document.getElementById('localActiveModelTitle');
+      const localDesc = document.getElementById('localDaemonDesc');
+      if (data.ollama_active && data.local_models_available && data.local_models_available.length > 0) {
+        if (localBadge) {
+          localBadge.className = 'engine-badge offline';
+          localBadge.textContent = 'Active (Offline Neural)';
+        }
+        if (localTitle) localTitle.textContent = `ORYQEN Local Core (${data.local_models_available[0]})`;
+        if (localDesc) localDesc.textContent = `100% on-device neural weights (${data.local_models_available.join(', ')}). Operates with zero internet connectivity.`;
+      } else {
+        if (localBadge) {
+          localBadge.className = 'engine-badge standby';
+          localBadge.textContent = 'Standby (Model Setup Required)';
+        }
+        if (localDesc) localDesc.textContent = 'Local daemon or neural model standby. Use Available Models library to download.';
+      }
+
+      if (state.mode === 'online') {
+        if (data.internet_available) {
+          statusBadge?.classList.remove('local', 'warning');
+          statusBadge?.classList.add('online');
+          if (statusLabel) statusLabel.textContent = 'Online (Cloud)';
+          if (sidebarStatus) sidebarStatus.textContent = 'Online (ORYQEN Cloud Intelligence)';
+          if (footerText) footerText.textContent = 'Online mode — Powered by ORYQEN Swift with live research capabilities.';
+        } else {
+          statusBadge?.classList.remove('online', 'local');
+          statusBadge?.classList.add('warning');
+          if (statusLabel) statusLabel.textContent = 'Offline (Cloud Unreachable)';
+          if (sidebarStatus) sidebarStatus.textContent = 'Network Disconnected';
+          if (footerText) footerText.textContent = 'Connection lost. Switch to Offline Mode to use on-device AI.';
+        }
+      } else {
+        // Offline mode
+        if (data.ollama_active && data.local_models_available && data.local_models_available.length > 0) {
+          statusBadge?.classList.remove('online', 'warning');
+          statusBadge?.classList.add('local');
+          const primaryModel = data.local_models_available[0].split(':')[0];
+          if (statusLabel) statusLabel.textContent = `Local: ${primaryModel}`;
+          if (sidebarStatus) sidebarStatus.textContent = `Offline (On-Device: ${data.local_models_available[0]})`;
+          if (footerText) footerText.textContent = `Offline mode — Running genuine neural model (${data.local_models_available[0]}) with zero internet.`;
+        } else {
+          statusBadge?.classList.remove('online', 'local');
+          statusBadge?.classList.add('warning');
+          if (statusLabel) statusLabel.textContent = 'Offline AI Unavailable';
+          if (sidebarStatus) sidebarStatus.textContent = 'Offline Standby (No Local Model)';
+          if (footerText) footerText.textContent = 'Local model standby. Open Settings > AI & Models to download an on-device model.';
+        }
+      }
+      return;
+    }
+  } catch (e) {
+    // Backend unreachable fallback
+  }
+
+  // Graceful fallback if backend call timed out
+  if (state.mode === 'online') {
     statusBadge?.classList.add('online');
     if (statusLabel) statusLabel.textContent = 'Online';
-    if (sidebarStatus) sidebarStatus.textContent = 'Online (ORYQEN Cloud Intelligence)';
-    if (footerText) footerText.textContent = 'Online mode — Powered by ORYQEN Swift with live research capabilities.';
-    showToast('Switched to Online Cloud AI');
   } else {
     statusBadge?.classList.remove('online');
     if (statusLabel) statusLabel.textContent = 'Offline';
-    if (sidebarStatus) sidebarStatus.textContent = 'Offline (On-Device)';
-    if (footerText) footerText.textContent = 'Offline mode — AI runs locally on your device without internet.';
-    showToast('Switched to Offline Mode');
   }
 }
+
 
 // ==========================================================================
 // AI Tutor Controls & Mode Handlers
@@ -1931,6 +2002,12 @@ function setupModals() {
       nav.classList.add('active');
       const targetPane = document.getElementById(`pane-${nav.dataset.tab}`);
       targetPane?.classList.add('active');
+
+      if (nav.dataset.tab === 'models') {
+        loadModelCatalog();
+      } else if (nav.dataset.tab === 'memory') {
+        loadMemoryGovernance();
+      }
     });
   });
 
@@ -1979,6 +2056,60 @@ function setupModals() {
     document.getElementById('speechRateDisplay').textContent = `${parseFloat(e.target.value).toFixed(2)}x Pace`;
   });
   document.getElementById('testVoicePreviewBtn')?.addEventListener('click', testVoicePreview);
+
+  // Settings: Learning Profile
+  document.getElementById('saveLearningProfileBtn')?.addEventListener('click', async () => {
+    const level = document.getElementById('userEducationLevel')?.value;
+    const exam = document.getElementById('userTargetExam')?.value.trim();
+    state.user.education_level = level;
+    state.user.target_exam = exam;
+    localStorage.setItem('oryqen_user_session', JSON.stringify(state.user));
+    showToast('Learning profile preferences updated!');
+  });
+
+  // Settings: Local Device Cache & Storage Reset
+  document.getElementById('clearLocalCacheBtn')?.addEventListener('click', async () => {
+    if (!confirm('Clear all offline browser caches and stored sessions on this device?')) return;
+    localStorage.removeItem('oryqen_sync_queue');
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      for (const k of keys) await caches.delete(k);
+    }
+    showToast('Browser cache and offline data cleared.');
+    setTimeout(() => window.location.reload(), 800);
+  });
+
+  // Settings: Memory Governance Form & Clear
+  document.getElementById('addMemoryForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const key = document.getElementById('memKeyInput')?.value.trim();
+    const val = document.getElementById('memValInput')?.value.trim();
+    if (!key || !val) return;
+    try {
+      await fetch(`${API_BASE}/api/memory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: 'preference', key, value: val, user_id: state.user.id }),
+      });
+      document.getElementById('memKeyInput').value = '';
+      document.getElementById('memValInput').value = '';
+      loadMemoryGovernance();
+      showToast('Preference saved to AI memory.');
+    } catch (err) {
+      showToast('Failed to save memory.', 'error');
+    }
+  });
+
+  document.getElementById('clearAllMemoryBtn')?.addEventListener('click', async () => {
+    if (!confirm('Clear all AI memories and personal learning preferences?')) return;
+    try {
+      await fetch(`${API_BASE}/api/memory?user_id=${state.user.id}`, { method: 'DELETE' });
+      loadMemoryGovernance();
+      showToast('All AI memory cleared.');
+    } catch (err) {
+      showToast('Failed to clear memories.', 'error');
+    }
+  });
 
   // Settings: Data Export
   document.getElementById('exportAllDataBtn')?.addEventListener('click', handleExportAllData);
@@ -2701,6 +2832,8 @@ function openSettingsModal() {
   checkHealthStatus();
   loadApiKeyStatus();
   loadSupabaseStatus();
+  loadModelCatalog();
+  loadMemoryGovernance();
 }
 
 async function handleSaveCloudKey() {
@@ -2960,3 +3093,193 @@ function showToast(msg, type = 'info') {
     setTimeout(() => t.remove(), 200);
   }, 2800);
 }
+
+// ==========================================================================
+// Model Management & Memory Governance Handlers
+// ==========================================================================
+async function loadModelCatalog() {
+  const installedContainer = document.getElementById('installedModelsList');
+  const recommendedContainer = document.getElementById('recommendedModelsCatalog');
+  const storageBadge = document.getElementById('storageUsageBadge');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/models`);
+    if (!res.ok) throw new Error('Failed to fetch model catalog');
+    const data = await res.json();
+
+    if (storageBadge) {
+      storageBadge.textContent = `Storage: ${data.storage_used || 'Checking...'}`;
+    }
+
+    // Installed Models
+    if (installedContainer) {
+      if (!data.installed_local_models || data.installed_local_models.length === 0) {
+        installedContainer.innerHTML = '<div style="font-size:12.5px; color:var(--text-muted); padding:10px 0;">No local models installed yet. Choose a recommended model below to enable genuine offline inference.</div>';
+      } else {
+        installedContainer.innerHTML = data.installed_local_models.map(m => `
+          <div class="installed-model-item">
+            <div class="model-meta-info">
+              <div class="model-name-row">
+                <span class="model-name-title">${escapeHtml(m.name)}</span>
+                <span class="model-tag-badge">Genuine Neural</span>
+              </div>
+              <span class="model-size-badge">Disk: ${escapeHtml(m.size)} • Modified: ${escapeHtml(m.modified_at || 'Installed')}</span>
+            </div>
+            <button type="button" class="btn btn-sm btn-ghost text-danger" onclick="deleteLocalModel('${escapeHtml(m.name)}')">
+              Remove
+            </button>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Recommended Models Library
+    if (recommendedContainer) {
+      const installedNames = (data.installed_local_models || []).map(m => m.name.toLowerCase());
+      recommendedContainer.innerHTML = (data.recommended_local_models || []).map(rec => {
+        const isInstalled = installedNames.some(n => n.includes(rec.name.toLowerCase()) || rec.name.toLowerCase().includes(n.split(':')[0]));
+        return `
+          <div class="model-catalog-card">
+            <div>
+              <div class="catalog-card-header">
+                <span class="catalog-card-title">${escapeHtml(rec.display_name)}</span>
+                <span class="catalog-card-meta">${escapeHtml(rec.size)}</span>
+              </div>
+              <p class="catalog-card-desc" style="margin-top:6px;">${escapeHtml(rec.description)}</p>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">
+                Engine: ${escapeHtml(rec.name)} • Params: ${escapeHtml(rec.parameters)}
+              </div>
+            </div>
+            <div>
+              ${isInstalled ? `
+                <button type="button" class="btn btn-sm btn-secondary full-width" disabled style="opacity:0.8;">
+                  ✓ Installed & Ready
+                </button>
+              ` : `
+                <button type="button" class="btn btn-sm btn-primary full-width" onclick="pullLocalModel('${escapeHtml(rec.name)}')">
+                  Download Model (${escapeHtml(rec.size)})
+                </button>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    if (installedContainer) installedContainer.innerHTML = `<div style="font-size:12px; color:#ef4444;">Failed to load model catalog: ${err.message}</div>`;
+  }
+}
+
+async function pullLocalModel(modelName) {
+  const progressWrap = document.getElementById('modelDownloadProgressWrap');
+  const titleEl = document.getElementById('modelDownloadTitle');
+  const barEl = document.getElementById('modelDownloadProgressBar');
+  const statusEl = document.getElementById('modelDownloadStatusText');
+  const pctEl = document.getElementById('modelDownloadPercentText');
+
+  progressWrap?.classList.remove('hidden');
+  if (titleEl) titleEl.textContent = `Downloading ${modelName}...`;
+  if (barEl) barEl.style.width = '0%';
+  if (statusEl) statusEl.textContent = 'Contacting model registry...';
+  if (pctEl) pctEl.textContent = '0%';
+  showToast(`Starting download for ${modelName}...`);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/models/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: modelName })
+    });
+
+    if (!res.ok) throw new Error('Download request failed');
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (jsonStr === '[DONE]') break;
+        try {
+          const payload = JSON.parse(jsonStr);
+          if (payload.status && statusEl) statusEl.textContent = payload.status;
+          if (payload.total && payload.completed) {
+            const pct = Math.min(100, Math.round((payload.completed / payload.total) * 100));
+            if (barEl) barEl.style.width = `${pct}%`;
+            if (pctEl) pctEl.textContent = `${pct}%`;
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (barEl) barEl.style.width = '100%';
+    if (pctEl) pctEl.textContent = '100%';
+    if (statusEl) statusEl.textContent = 'Installation complete!';
+    showToast(`Model ${modelName} downloaded and ready for offline use!`);
+    setTimeout(() => progressWrap?.classList.add('hidden'), 2500);
+    loadModelCatalog();
+    updateHonestStatus();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `Download failed: ${err.message}`;
+    showToast(`Failed to download model: ${err.message}`, 'error');
+  }
+}
+
+async function deleteLocalModel(modelName) {
+  if (!confirm(`Remove local model "${modelName}" from your device storage?`)) return;
+  try {
+    showToast(`Removing ${modelName}...`);
+    const res = await fetch(`${API_BASE}/api/models/${encodeURIComponent(modelName)}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Deletion failed');
+    showToast(`Model ${modelName} removed.`);
+    loadModelCatalog();
+    updateHonestStatus();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function loadMemoryGovernance() {
+  const list = document.getElementById('memoryItemsList');
+  if (!list) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/memory?user_id=${state.user.id}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.memories || data.memories.length === 0) {
+      list.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:10px 0;">No memories stored. Add your academic goals or learning style preferences below!</div>';
+      return;
+    }
+    list.innerHTML = data.memories.map(m => `
+      <div class="memory-item-row">
+        <div class="mem-text">
+          <span class="mem-tag">${escapeHtml(m.key)}:</span> ${escapeHtml(m.value)}
+        </div>
+        <button type="button" class="icon-btn-sm" style="color:var(--text-muted);" onclick="deleteMemoryGovernanceItem('${escapeHtml(m.id)}')" title="Delete memory">&times;</button>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+async function deleteMemoryGovernanceItem(id) {
+  try {
+    await fetch(`${API_BASE}/api/memory/${id}?user_id=${state.user.id}`, { method: 'DELETE' });
+    loadMemoryGovernance();
+    showToast('Memory item removed.');
+  } catch (e) {
+    showToast('Failed to delete memory.', 'error');
+  }
+}
+
+window.deleteLocalModel = deleteLocalModel;
+window.pullLocalModel = pullLocalModel;
+window.deleteMemoryGovernanceItem = deleteMemoryGovernanceItem;
+

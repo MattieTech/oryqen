@@ -1,0 +1,33 @@
+{
+  "name": "ORYQEN AI — Assistant & Educational Platform",
+  "short_name": "ORYQEN",
+  "description": "Advanced dual-purpose AI assistant and intelligent offline/online educational tutor.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#07090e",
+  "theme_color": "#07090e",
+  "categories": ["education", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='128' fill='%2307090e'/><circle cx='256' cy='256' r='180' stroke='%236366f1' stroke-width='32' fill='none'/><circle cx='256' cy='256' r='90' fill='%236366f1'/><path d='M256 76 A180 180 0 0 1 436 256' stroke='%2338bdf8' stroke-width='40' fill='none' stroke-linecap='round'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "General AI Chat",
+      "short_name": "Chat",
+      "description": "Start a new conversation with ORYQEN Assistant",
+      "url": "/?ws=general"
+    },
+    {
+      "name": "AI Tutor Workspace",
+      "short_name": "Tutor",
+      "description": "Practice, quiz, and study with ORYQEN AI Tutor",
+      "url": "/?ws=tutor"
+    }
+  ]
+}

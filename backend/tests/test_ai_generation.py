@@ -66,8 +66,9 @@ with client.stream("POST", "/api/chat/stream", json={
                 break
             try:
                 chunk_data = json.loads(payload)
-                if "token" in chunk_data:
-                    chunks.append(chunk_data["token"])
+                val = chunk_data.get("token") or chunk_data.get("chunk")
+                if val:
+                    chunks.append(val)
             except Exception:
                 pass
     full_text = "".join(chunks)

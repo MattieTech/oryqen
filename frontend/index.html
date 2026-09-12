@@ -2,9 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ORYQEN — General AI & AI Tutor Platform</title>
   <meta name="description" content="ORYQEN is an advanced dual-purpose AI assistant and educational intelligence platform. Operates both offline and online.">
+  <meta name="theme-color" content="#07090e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
   
   <!-- Modern Typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1106,6 +1110,10 @@
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
             <span>Appearance</span>
           </button>
+          <button class="settings-nav-item" data-tab="models" id="settingsTabModelsBtn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
+            <span>AI & Models</span>
+          </button>
           <button class="settings-nav-item" data-tab="voice">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
             <span>Voice & Audio</span>
@@ -1113,6 +1121,10 @@
           <button class="settings-nav-item" data-tab="learning">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
             <span>Learning Profile</span>
+          </button>
+          <button class="settings-nav-item" data-tab="memory">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12 2.1 7.1"></path><path d="M12 12l9.9-4.9"></path></svg>
+            <span>Memory Governance</span>
           </button>
           <button class="settings-nav-item" data-tab="data">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -1242,8 +1254,86 @@
               </button>
             </div>
           </div>
-        </div>
-      </div>
+
+          <!-- Tab 5: AI & Models (Model Manager) -->
+          <div class="settings-tab-pane" id="pane-models">
+            <div class="settings-section">
+              <div class="settings-section-title">Active Inference Engines</div>
+              <div class="model-status-summary-grid">
+                <div class="model-status-card" id="cardStatusCloud">
+                  <div class="model-status-card-header">
+                    <span class="engine-badge online">Cloud Online</span>
+                    <span class="engine-title">ORYQEN Swift</span>
+                  </div>
+                  <p class="model-status-desc">Powered by Google Gemini & OpenRouter for live web research and deep synthesis.</p>
+                </div>
+                <div class="model-status-card" id="cardStatusLocal">
+                  <div class="model-status-card-header">
+                    <span class="engine-badge offline" id="localDaemonBadge">Local Standby</span>
+                    <span class="engine-title" id="localActiveModelTitle">ORYQEN Local Core</span>
+                  </div>
+                  <p class="model-status-desc" id="localDaemonDesc">100% on-device neural weights. Operates with zero internet connectivity.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="section-title-row">
+                <div class="settings-section-title">Installed Local Models</div>
+                <span class="badge badge-accent" id="storageUsageBadge">Storage: Checking...</span>
+              </div>
+              <p class="settings-help">Genuine GGUF neural models running on your device. Zero cloud dependency.</p>
+              <div class="installed-models-list" id="installedModelsList">
+                <div class="loading-state-mini">Loading model catalog...</div>
+              </div>
+            </div>
+
+            <!-- Download Progress Indicator (Shown while pulling model) -->
+            <div class="settings-section hidden" id="modelDownloadProgressWrap">
+              <div class="settings-section-title" id="modelDownloadTitle">Downloading Model...</div>
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" id="modelDownloadProgressBar" style="width: 0%;"></div>
+              </div>
+              <div class="progress-text-row">
+                <span id="modelDownloadStatusText">Initializing download stream...</span>
+                <span id="modelDownloadPercentText">0%</span>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Available Models Library</div>
+              <p class="settings-help">Download optimized, verified edge models directly to your machine with 1 click.</p>
+              <div class="recommended-models-grid" id="recommendedModelsCatalog">
+                <!-- Dynamically populated via loadModelCatalog() -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 6: Memory Governance -->
+          <div class="settings-tab-pane" id="pane-memory">
+            <div class="settings-section">
+              <div class="settings-section-title">Personal Knowledge & Memory</div>
+              <p class="settings-help">ORYQEN continuously personalizes your academic explanations based on your designated goals, preferred learning style, and study topics. You have 100% control to inspect or remove any saved memory.</p>
+              
+              <div class="memory-items-list" id="memoryItemsList">
+                <div class="loading-state-mini">Loading memory items...</div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Add Custom Academic Goal or Preference</div>
+              <form id="addMemoryForm" class="add-memory-form">
+                <div class="add-memory-grid">
+                  <input type="text" id="memKeyInput" class="settings-input" placeholder="e.g. Focus Topic, Target University, Learning Goal" required>
+                  <input type="text" id="memValInput" class="settings-input" placeholder="e.g. Astrophysics, High Honors in JAMB, Step-by-step calculus" required>
+                </div>
+                <div class="add-memory-actions">
+                  <button type="submit" class="btn btn-secondary">Add Memory</button>
+                  <button type="button" class="btn btn-ghost text-danger" id="clearAllMemoryBtn">Clear All Memory</button>
+                </div>
+              </form>
+            </div>
+          </div>
 
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" id="dismissSettingsBtn">Done</button>
