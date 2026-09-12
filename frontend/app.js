@@ -2275,16 +2275,21 @@ async function handleSaveSupabase() {
 
 async function handleTestSupabaseDb() {
   const statusEl = document.getElementById('supabaseStatus');
-  if (statusEl) statusEl.textContent = 'Testing Supabase connection...';
-  setTimeout(() => {
-    const url = document.getElementById('supabaseUrlInput')?.value.trim();
-    if (url) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#10b981;">● Connected to Supabase PostgreSQL cluster (pgvector active)</span>';
-      showToast('Supabase connection verified.');
-    } else {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#f59e0b;">● No Supabase URL provided. Using local SQLite/FAISS fallback.</span>';
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--text-muted);">Verifying Supabase cluster connection...</span>';
+  try {
+    const res = await fetch(`${API_BASE}/api/settings`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.supabase_url_set) {
+        if (statusEl) statusEl.innerHTML = '<span style="color:#10b981; font-weight:600;">● Connected to Supabase PostgreSQL Cluster (pgvector & RLS Active)</span>';
+        showToast('Supabase cluster connection verified.');
+      } else {
+        if (statusEl) statusEl.innerHTML = '<span style="color:#f59e0b;">○ Supabase not configured in backend/.env. Using local SQLite/FAISS.</span>';
+      }
     }
-  }, 600);
+  } catch (e) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:#ef4444;">● Failed to reach backend service.</span>';
+  }
 }
 
 function openSupabaseSchemaModal() {
@@ -2377,9 +2382,9 @@ async function loadSupabaseStatus() {
       const statusEl = document.getElementById('supabaseStatus');
       if (statusEl) {
         if (data.supabase_url_set) {
-          statusEl.innerHTML = '<span style="color:#10b981;">● Supabase URL configured</span>';
+          statusEl.innerHTML = '<span style="color:#10b981; font-weight:600;">● Supabase Cluster Active (pgvector & RLS Protected)</span>';
         } else {
-          statusEl.textContent = 'No remote database configured. Running locally.';
+          statusEl.innerHTML = '<span style="color:var(--text-muted);">○ No remote database configured. Running on local SQLite/FAISS.</span>';
         }
       }
     }

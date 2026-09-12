@@ -338,6 +338,19 @@ CREATE POLICY "Users manage own study plans" ON public.study_plans FOR ALL USING
 CREATE POLICY "Users manage own memories" ON public.user_memories FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users view own subscription" ON public.subscriptions FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users view own progress" ON public.progress FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Public read courses" ON public.courses FOR SELECT USING (true);
+
+-- =============================================================================
+-- ROLE GRANTS (Permits PostgREST API access via anon, authenticated & service_role)
+-- =============================================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
 
 -- =============================================================================
 -- INITIAL DEFAULT DATA
@@ -351,3 +364,4 @@ ON CONFLICT (code) DO NOTHING;
 
 -- Schema deployment verification
 SELECT 'ORYQEN Supabase schema initialized successfully!' AS status;
+

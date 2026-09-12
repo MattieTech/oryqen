@@ -1168,61 +1168,48 @@
           <!-- Tab 3: Cloud Intelligence & Multi-Tier Failover -->
           <div class="settings-tab-pane" id="pane-cloud">
             <div class="settings-section">
-              <div class="settings-section-title">Cloud Intelligence & Multi-Tier Failover Architecture</div>
-              <p class="settings-help">ORYQEN operates with an automatic 4-tier failover engine. If the primary cloud engine reaches quota limits or rate limits, traffic automatically and seamlessly shifts to your backup engines, ensuring zero downtime.</p>
+              <div class="settings-section-title">Cloud Intelligence & Failover Architecture</div>
+              <p class="settings-help">ORYQEN operates with an automated 4-tier resilient neural pipeline. All proprietary model credentials and routing policies are secured server-side in your environment configuration, protecting them from client inspection and unauthorized access.</p>
 
-              <!-- Tier 1: Primary Cloud Engine -->
-              <div class="settings-field">
-                <div class="field-label-row">
-                  <label class="settings-label" for="apiKeyInput">Primary Cloud Key (Google Gemini)</label>
-                  <span class="badge badge-accent">Tier 1 Primary</span>
+              <!-- Tier Architecture Display -->
+              <div class="model-cards-grid" style="margin-top: 14px; margin-bottom: 16px;">
+                <div class="model-info-card">
+                  <div class="card-header-row">
+                    <span class="model-tag-pill accent">Tier 1 Primary</span>
+                  </div>
+                  <div class="card-title">ORYQEN Swift (Primary Cloud Engine)</div>
+                  <div class="card-desc">High-speed conversational intelligence, Socratic tutoring, and real-time study assistance.</div>
                 </div>
-                <div class="pwd-input-wrap">
-                  <input type="password" id="apiKeyInput" class="settings-input" placeholder="AIzaSy... (Gemini API Key)" autocomplete="off">
-                  <button type="button" class="pwd-eye-btn" id="apiKeyEyeToggle" title="Toggle visibility">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  </button>
-                </div>
-                <div class="settings-key-status" id="apiKeyStatus" style="margin-top:4px; font-size:12px;"></div>
-              </div>
 
-              <!-- Tier 2: OpenRouter Backup Failover -->
-              <div class="settings-field">
-                <div class="field-label-row">
-                  <label class="settings-label" for="openrouterKeyInput">Backup Engine 1 (OpenRouter Key)</label>
-                  <span class="badge badge-blue">Tier 2 Failover</span>
+                <div class="model-info-card">
+                  <div class="card-header-row">
+                    <span class="model-tag-pill blue">Tier 2 Failover</span>
+                  </div>
+                  <div class="card-title">OpenRouter Neural Failover</div>
+                  <div class="card-desc">Automated secondary failover cluster for zero-downtime quota and rate limit mitigation.</div>
                 </div>
-                <div class="pwd-input-wrap">
-                  <input type="password" id="openrouterKeyInput" class="settings-input" placeholder="sk-or-v1-... (OpenRouter API Key)" autocomplete="off">
-                  <button type="button" class="pwd-eye-btn" id="openrouterKeyEyeToggle" title="Toggle visibility">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  </button>
-                </div>
-                <div class="settings-key-status" id="openrouterKeyStatus" style="margin-top:4px; font-size:12px;"></div>
-              </div>
 
-              <!-- Tier 3: OpenAI Secondary Backup -->
-              <div class="settings-field">
-                <div class="field-label-row">
-                  <label class="settings-label" for="openaiKeyInput">Backup Engine 2 (OpenAI Key)</label>
-                  <span class="badge badge-secondary">Tier 3 Failover</span>
+                <div class="model-info-card">
+                  <div class="card-header-row">
+                    <span class="model-tag-pill orange">Tier 3 Failover</span>
+                  </div>
+                  <div class="card-title">OpenAI High-Capacity Failover</div>
+                  <div class="card-desc">Tertiary cloud backup for resilient continuity during global service interruptions.</div>
                 </div>
-                <div class="pwd-input-wrap">
-                  <input type="password" id="openaiKeyInput" class="settings-input" placeholder="sk-proj-... (OpenAI API Key)" autocomplete="off">
-                  <button type="button" class="pwd-eye-btn" id="openaiKeyEyeToggle" title="Toggle visibility">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  </button>
+
+                <div class="model-info-card">
+                  <div class="card-header-row">
+                    <span class="model-tag-pill purple">Tier 4 Offline Core</span>
+                  </div>
+                  <div class="card-title">ORYQEN Local Core</div>
+                  <div class="card-desc">On-device edge intelligence providing continuous operation without internet connectivity.</div>
                 </div>
-                <div class="settings-key-status" id="openaiKeyStatus" style="margin-top:4px; font-size:12px;"></div>
               </div>
 
               <div class="connection-action-row" style="margin-top: 14px;">
-                <button type="button" class="btn btn-primary" id="saveApiKeyBtn">
-                  <span>Save All Keys</span>
-                </button>
-                <button type="button" class="btn btn-secondary" id="testCloudPingBtn">
+                <button type="button" class="btn btn-primary" id="testCloudPingBtn">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-                  <span>Test Connection</span>
+                  <span>Test Neural Cloud Connection</span>
                 </button>
                 <div class="connection-status-pill hidden" id="cloudPingResult">
                   <span class="status-dot"></span>
@@ -1265,36 +1252,37 @@
           <div class="settings-tab-pane" id="pane-database">
             <div class="settings-section">
               <div class="settings-section-title">Supabase Cloud Database & Embeddings</div>
-              <p class="settings-help">Connect ORYQEN to your managed PostgreSQL / Supabase cluster for cross-device synchronization, pgvector search, and permanent chat history.</p>
+              <p class="settings-help">ORYQEN synchronizes learning records, flashcards, vector memories, and study progress with your Supabase PostgreSQL cluster. All connection strings and service keys are managed server-side in your environment configuration for maximum security.</p>
 
-              <div class="settings-field">
-                <label class="settings-label" for="supabaseUrlInput">Supabase Project URL</label>
-                <input type="text" id="supabaseUrlInput" class="settings-input" placeholder="https://your-project.supabase.co">
-              </div>
+              <div class="model-cards-grid" style="margin-top: 14px; margin-bottom: 16px;">
+                <div class="model-info-card">
+                  <div class="card-header-row">
+                    <span class="model-tag-pill accent">Managed Cluster</span>
+                  </div>
+                  <div class="card-title">PostgreSQL & pgvector</div>
+                  <div class="card-desc">High-performance vector embeddings, relational learning history, and multi-device account state.</div>
+                </div>
 
-              <div class="settings-field">
-                <label class="settings-label" for="supabaseKeyInput">Supabase Anon Public API Key</label>
-                <div class="pwd-input-wrap">
-                  <input type="password" id="supabaseKeyInput" class="settings-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
-                  <button type="button" class="pwd-eye-btn" id="supabaseKeyEyeToggle" title="Toggle visibility">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  </button>
+                <div class="model-info-card">
+                  <div class="card-header-row">
+                    <span class="model-tag-pill blue">Security Active</span>
+                  </div>
+                  <div class="card-title">Row-Level Security (RLS)</div>
+                  <div class="card-desc">Isolated student schemas with strict ownership policies protecting individual user study data.</div>
                 </div>
               </div>
 
               <div class="connection-action-row">
-                <button type="button" class="btn btn-primary" id="saveSupabaseBtn">
-                  <span>Save Supabase Config</span>
+                <button type="button" class="btn btn-primary" id="testDbConnectionBtn">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+                  <span>Test Database Connection</span>
                 </button>
                 <button type="button" class="btn btn-secondary" id="copySchemaSqlBtn">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                  <span>Copy SQL Schema</span>
-                </button>
-                <button type="button" class="btn btn-secondary" id="testDbConnectionBtn">
-                  <span>Test DB</span>
+                  <span>View SQL Schema</span>
                 </button>
               </div>
-              <div class="settings-key-status" id="supabaseStatus"></div>
+              <div class="settings-key-status" id="supabaseStatus" style="margin-top: 12px;"></div>
             </div>
           </div>
 
