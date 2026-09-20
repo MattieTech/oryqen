@@ -1,0 +1,92 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - 'android/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compile ORYQEN Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Set up Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Node Dependencies
+        run: npm ci || npm install
+
+      - name: Sync Capacitor Android Project
+        run: npx cap sync android
+
+      - name: Grant Execute Permission for Gradle Wrapper
+        run: chmod +x android/gradlew
+
+      - name: Build Android APK with Gradle
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
+          cd ..
+
+      - name: Prepare APK Artifact
+        run: |
+          mkdir -p build-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/oryqen-v2.0-offline.apk
+
+      - name: Upload APK to Job Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oryqen-v2.0-offline-apk
+          path: build-output/oryqen-v2.0-offline.apk
+          if-no-files-found: error
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v2.0.0-apk
+          name: ORYQEN Android Offline Edition (v2.0.0)
+          body: |
+            ## 🚀 ORYQEN Android On-Device AI Edition
+
+            Download and install the official ORYQEN Android APK on any smartphone.
+            
+            ### ✨ Features
+            - **100% On-Device Offline Intelligence**: Download your offline neural brain (~350MB) once and run anywhere in Airplane mode.
+            - **Online Cloud Super-Reasoning**: Switch seamlessly to ORYQEN Swift for web search and deep research.
+            - **AI Tutor & Exam Prep**: Step-by-step Socratic teaching, LaTeX math rendering, interactive quizzes, and flashcards.
+            - **Direct Sideloading**: Installs cleanly on Android 8.0+ devices without needing Google Play Store.
+
+            ### 📲 Installation
+            1. Download `oryqen-v2.0-offline.apk` below to your Android phone.
+            2. Tap the downloaded file to install (allow "Install from Unknown Sources" if prompted).
+            3. Open ORYQEN and enjoy on-device AI!
+          files: build-output/oryqen-v2.0-offline.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

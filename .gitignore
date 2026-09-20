@@ -42,3 +42,16 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Node & Capacitor
+node_modules/
+package-lock.json
+
+# Android build outputs & caches
+build-output/
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+*.apk
+*.aab

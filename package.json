@@ -1,0 +1,15 @@
+{
+  "name": "oryqen-ai",
+  "version": "2.0.0",
+  "description": "ORYQEN — General AI & AI Tutor Platform with Offline Neural Capabilities",
+  "private": true,
+  "scripts": {
+    "cap:sync": "cap sync",
+    "cap:build": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/core": "^6.2.0"
+  }
+}

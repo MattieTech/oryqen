@@ -1,0 +1,12 @@
+{
+  "appId": "ai.oryqen.platform",
+  "appName": "ORYQEN AI",
+  "webDir": "frontend",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

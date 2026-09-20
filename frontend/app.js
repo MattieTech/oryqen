@@ -95,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupKeyboardShortcuts();
   setupConnectivityListeners();
   setupScrollToBottomFab();
+  setupOfflineBrainModal();
 
   // Load initial data
   setAiMode(state.mode, false);
@@ -1250,6 +1251,59 @@ async function submitUserMessage(overrideQuery) {
 
   setGeneratingState(true);
   state.abortController = new AbortController();
+
+  // Standalone on-device mobile AI execution branch
+  if (state.mode === 'offline' && window.OfflineEngine) {
+    const installed = window.OfflineEngine.getInstalledModelInfo();
+    let backendReachable = false;
+    try {
+      const probe = await fetch(`${API_BASE}/api/health`, { method: 'GET', signal: AbortSignal.timeout(1200) });
+      backendReachable = probe.ok;
+    } catch (e) {
+      backendReachable = false;
+    }
+
+    if (!backendReachable) {
+      if (installed) {
+        removeElement(thinkingId);
+        const assistantBubble = createStreamingAssistantRow(installed.displayName || 'ORYQEN On-Device Core');
+        let fullContent = '';
+
+        try {
+          for await (const chunk of window.OfflineEngine.streamInference(query, '', () => {})) {
+            if (state.abortController?.signal?.aborted) break;
+            fullContent += chunk.token;
+            updateStreamingAssistantRow(assistantBubble, fullContent);
+            scrollToBottom();
+          }
+          state.messages.push({ role: 'assistant', content: fullContent, model: 'oryqen-device-core' });
+        } catch (infErr) {
+          appendMessageRow({ role: 'assistant', content: `⚠️ On-device inference notice: ${infErr.message}`, model: 'ORYQEN Error' });
+        } finally {
+          setGeneratingState(false);
+          showTypingIndicator(false);
+          state.abortController = null;
+          renderAllMath();
+          enhanceCodeBlocks();
+        }
+        return;
+      } else {
+        removeElement(thinkingId);
+        appendMessageRow({
+          role: 'assistant',
+          content: '⚠️ **On-Device Offline Brain Required**\n\nYou are in Offline Mode with no local server detected. To chat offline directly on your phone with zero internet, download your on-device neural brain (~350 MB once over WiFi).\n\n<button type="button" class="btn btn-sm btn-primary" id="promptOpenOfflineBrainBtn" style="margin-top:8px;">Open Offline Brain Setup</button>',
+          model: 'ORYQEN Standby',
+        });
+        document.getElementById('promptOpenOfflineBrainBtn')?.addEventListener('click', () => {
+          document.getElementById('offlineBrainModal')?.classList.remove('hidden');
+        });
+        setGeneratingState(false);
+        showTypingIndicator(false);
+        state.abortController = null;
+        return;
+      }
+    }
+  }
 
   const payload = {
     question: query,
@@ -3518,7 +3572,7 @@ function setupKeyboardShortcuts() {
       document.getElementById('adminLoginModal')?.classList.remove('hidden');
     }
     if (e.key === 'Escape') {
-      ['docsModal', 'settingsModal', 'citationModal', 'quizModal', 'flashcardModal', 'studentDashboardModal', 'memoryModal', 'subscriptionModal', 'authModal', 'adminLoginModal', 'adminModal', 'shortcutsModal'].forEach(id => {
+      ['docsModal', 'settingsModal', 'citationModal', 'quizModal', 'flashcardModal', 'studentDashboardModal', 'memoryModal', 'subscriptionModal', 'authModal', 'adminLoginModal', 'adminModal', 'shortcutsModal', 'offlineBrainModal'].forEach(id => {
         document.getElementById(id)?.classList.add('hidden');
       });
     }
@@ -3537,6 +3591,135 @@ function setupKeyboardShortcuts() {
       document.getElementById('adminLoginModal')?.classList.remove('hidden');
     }
   });
+}
+
+// ==========================================================================
+// Offline Brain On-Device Setup Modal & Downloader
+// ==========================================================================
+function setupOfflineBrainModal() {
+  const modal = document.getElementById('offlineBrainModal');
+  if (!modal || !window.OfflineEngine) return;
+
+  let selectedModelId = 'qwen2.5-0.5b';
+
+  async function refreshOfflineBrainUI() {
+    const storage = await window.OfflineEngine.getStorageEstimate();
+    const storageBadge = document.getElementById('offlineStorageAvailBadge');
+    if (storageBadge) {
+      storageBadge.textContent = `Available: ${storage.availableMb} MB`;
+    }
+
+    const isInstalled = await window.OfflineEngine.isModelInstalled(selectedModelId);
+    const installedCard = document.getElementById('offlineInstalledCard');
+    const downloadBtn = document.getElementById('startOfflineDownloadBtn');
+    const startChatBtn = document.getElementById('startChattingOfflineBtn');
+    const deleteBtn = document.getElementById('deleteOfflineBrainBtn');
+    const pill = document.getElementById('sidebarOfflineBrainPill');
+
+    if (isInstalled) {
+      installedCard?.classList.remove('hidden');
+      downloadBtn?.classList.add('hidden');
+      startChatBtn?.classList.remove('hidden');
+      deleteBtn?.classList.remove('hidden');
+      if (pill) {
+        pill.textContent = 'Active';
+        pill.style.background = '#10b981';
+      }
+    } else {
+      installedCard?.classList.add('hidden');
+      downloadBtn?.classList.remove('hidden');
+      startChatBtn?.classList.add('hidden');
+      deleteBtn?.classList.add('hidden');
+      if (pill) {
+        pill.textContent = '350 MB';
+        pill.style.background = 'var(--primary)';
+      }
+    }
+  }
+
+  // Open buttons
+  document.getElementById('sidebarOfflineBrainBtn')?.addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    refreshOfflineBrainUI();
+  });
+
+  // Close buttons
+  document.getElementById('closeOfflineBrainModalBtn')?.addEventListener('click', () => {
+    modal.classList.add('hidden');
+  });
+  document.getElementById('closeOfflineBrainActionBtn')?.addEventListener('click', () => {
+    modal.classList.add('hidden');
+  });
+
+  // Model Selection Cards
+  document.getElementById('cardModelQwen')?.addEventListener('click', () => {
+    selectedModelId = 'qwen2.5-0.5b';
+    document.getElementById('cardModelQwen')?.classList.add('active');
+    document.getElementById('cardModelSmol')?.classList.remove('active');
+    const downloadBtn = document.getElementById('startOfflineDownloadBtn');
+    if (downloadBtn) downloadBtn.textContent = 'Download Offline Brain (350 MB)';
+    refreshOfflineBrainUI();
+  });
+
+  document.getElementById('cardModelSmol')?.addEventListener('click', () => {
+    selectedModelId = 'smollm2-360m';
+    document.getElementById('cardModelSmol')?.classList.add('active');
+    document.getElementById('cardModelQwen')?.classList.remove('active');
+    const downloadBtn = document.getElementById('startOfflineDownloadBtn');
+    if (downloadBtn) downloadBtn.textContent = 'Download Offline Brain (220 MB)';
+    refreshOfflineBrainUI();
+  });
+
+  // Start Download
+  const downloadBtn = document.getElementById('startOfflineDownloadBtn');
+  downloadBtn?.addEventListener('click', async () => {
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = 'Downloading weights...';
+    const progressTitle = document.getElementById('offlineProgressTitle');
+    const progressPct = document.getElementById('offlineProgressPct');
+    const progressBar = document.getElementById('offlineProgressBar');
+    const progressTransferred = document.getElementById('offlineProgressTransferred');
+    const progressSpeed = document.getElementById('offlineProgressSpeed');
+
+    try {
+      await window.OfflineEngine.downloadModel(selectedModelId, (p) => {
+        if (progressPct) progressPct.textContent = `${p.percent}%`;
+        if (progressBar) progressBar.style.width = `${p.percent}%`;
+        if (progressTitle) progressTitle.textContent = p.percent === 100 ? 'Download Complete!' : 'Downloading Neural Weights...';
+        if (progressTransferred) progressTransferred.textContent = `${p.transferredMb} MB / ${p.totalMb} MB`;
+        if (progressSpeed) progressSpeed.textContent = `Speed: ${p.speedMbps} MB/s`;
+      });
+
+      showToast('Offline Neural Brain installed successfully!');
+      refreshOfflineBrainUI();
+    } catch (err) {
+      showToast(`Download failed: ${err.message}`, 'error');
+      if (progressTitle) progressTitle.textContent = 'Download Failed';
+    } finally {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = 'Download Offline Brain';
+    }
+  });
+
+  // Delete
+  document.getElementById('deleteOfflineBrainBtn')?.addEventListener('click', async () => {
+    if (confirm('Delete downloaded offline brain weights from this device?')) {
+      await window.OfflineEngine.deleteInstalledModel(selectedModelId);
+      showToast('Offline model removed from device.');
+      refreshOfflineBrainUI();
+    }
+  });
+
+  // Start Chatting
+  document.getElementById('startChattingOfflineBtn')?.addEventListener('click', () => {
+    modal.classList.add('hidden');
+    setAiMode('offline');
+    startNewChat();
+    showToast('Offline Mode Active — 100% On-Device AI');
+  });
+
+  // Initial check on load
+  refreshOfflineBrainUI();
 }
 
 function showToast(msg, type = 'info') {

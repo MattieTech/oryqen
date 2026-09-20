@@ -177,6 +177,23 @@
             <span class="pill-indicator">PWA</span>
           </button>
 
+          <button class="sub-link-btn" id="sidebarOfflineBrainBtn" title="Setup On-Device Offline Neural Brain">
+            <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+            </svg>
+            <span>Offline Brain</span>
+            <span class="pill-indicator" id="sidebarOfflineBrainPill" style="background:var(--primary); color:#fff;">350 MB</span>
+          </button>
+
+          <a href="https://github.com/MattieTech/oryqen/releases/latest/download/oryqen-v2.0-offline.apk" class="sub-link-btn" id="sidebarDownloadApkBtn" title="Download Official Android APK" download style="text-decoration:none;">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+              <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            </svg>
+            <span>Android APK</span>
+            <span class="pill-indicator" style="background:#10b981; color:#fff;">v2.0</span>
+          </a>
+
         </div>
 
         <!-- User Profile Quick Bar -->
@@ -1776,9 +1793,90 @@
     </div>
   </div>
 
+  <!-- ================= OFFLINE BRAIN ONBOARDING MODAL ================= -->
+  <div class="modal-overlay hidden" id="offlineBrainModal">
+    <div class="modal-card modal-md">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-badge-row">
+            <span class="engine-badge offline">100% On-Device</span>
+            <span class="engine-badge" id="offlineStorageAvailBadge">Checking Storage...</span>
+          </div>
+          <h3>ORYQEN Offline Neural Brain</h3>
+          <p>Download your on-device AI weights once over WiFi. Once downloaded, your phone processes intelligence in Airplane mode with zero internet.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeOfflineBrainModalBtn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Model Selection Cards -->
+        <div class="model-select-group">
+          <label class="control-label">Select On-Device Model Architecture</label>
+          <div class="offline-models-grid">
+            <div class="offline-model-card active" data-offline-model="qwen2.5-0.5b" id="cardModelQwen">
+              <div class="offline-card-top">
+                <span class="offline-card-title">Qwen2.5 0.5B Instruct</span>
+                <span class="offline-card-pill">Recommended • ~350 MB</span>
+              </div>
+              <p class="offline-card-desc">Fast, mathematically grounded, and multilingual. Exceptional balance of reasoning depth and mobile efficiency.</p>
+              <div class="offline-card-specs">Params: 0.5B • Quant: Q4_K_M • Format: GGUF</div>
+            </div>
+
+            <div class="offline-model-card" data-offline-model="smollm2-360m" id="cardModelSmol">
+              <div class="offline-card-top">
+                <span class="offline-card-title">SmolLM2 360M Instruct</span>
+                <span class="offline-card-pill">Ultra-Light • ~220 MB</span>
+              </div>
+              <p class="offline-card-desc">Engineered for lightweight hardware and budget smartphones (1GB–2GB RAM). Instantaneous token generation.</p>
+              <div class="offline-card-specs">Params: 360M • Quant: Q4_K_M • Format: GGUF</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Download Status / Progress View -->
+        <div class="offline-download-box" id="offlineDownloadBox">
+          <div class="offline-status-header">
+            <span class="offline-status-title" id="offlineProgressTitle">Ready for Setup</span>
+            <span class="offline-status-pct" id="offlineProgressPct">0%</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="offlineProgressBar" style="width: 0%;"></div>
+          </div>
+          <div class="offline-status-meta">
+            <span id="offlineProgressTransferred">0 MB / 350 MB</span>
+            <span id="offlineProgressSpeed">Speed: --</span>
+          </div>
+        </div>
+
+        <!-- Installed State Card -->
+        <div class="offline-installed-card hidden" id="offlineInstalledCard">
+          <div class="installed-icon-wrap">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#10b981" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <div>
+            <h4 id="offlineInstalledTitle">Offline Brain Ready</h4>
+            <p id="offlineInstalledDesc">Model weights are securely cached on your device. You can now toggle to Offline Mode and chat with zero internet.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost text-danger hidden" id="deleteOfflineBrainBtn">Delete Model Weights</button>
+        <div class="footer-actions-right">
+          <button type="button" class="btn btn-secondary" id="closeOfflineBrainActionBtn">Close</button>
+          <button type="button" class="btn btn-primary" id="startOfflineDownloadBtn">Download Offline Brain (350 MB)</button>
+          <button type="button" class="btn btn-success hidden" id="startChattingOfflineBtn">Start Chatting Offline</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Shelf -->
   <div class="toast-shelf" id="toastShelf"></div>
 
+  <script src="offline-engine.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

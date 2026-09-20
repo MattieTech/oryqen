@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ORYQEN AI</string>
+    <string name="title_activity_main">ORYQEN AI</string>
+    <string name="package_name">ai.oryqen.platform</string>
+    <string name="custom_url_scheme">ai.oryqen.platform</string>
+</resources>
