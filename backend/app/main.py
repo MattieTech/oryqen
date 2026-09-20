@@ -101,19 +101,9 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# CORS — restrict to known origins in production, allow localhost for dev
-CORS_ORIGINS = [
-    "http://localhost:8000",
-    "http://localhost:3000",
-    "http://127.0.0.1:8000",
-    "http://127.0.0.1:3000",
-    "https://oryqen.ai",
-    "https://www.oryqen.ai",
-    "https://app.oryqen.ai",
-]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origin_regex=r".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
