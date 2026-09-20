@@ -45,7 +45,6 @@ Thumbs.db
 
 # Node & Capacitor
 node_modules/
-package-lock.json
 
 # Android build outputs & caches
 build-output/
