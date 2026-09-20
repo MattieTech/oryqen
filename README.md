@@ -45,24 +45,27 @@ ORYQEN AI/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                     # FastAPI application endpoints & routing
-│   │   ├── config.py                   # Environment & runtime configuration
-│   │   ├── database.py                 # SQLite & Supabase database manager
+│   │   ├── db/
+│   │   │   ├── database.py             # SQLite connection manager & migrations
+│   │   │   └── init_sql.py             # Database schema (CREATE TABLE statements)
 │   │   └── services/
-│   │       ├── ai_service.py           # Proprietary cognitive engine coordinator
-│   │       ├── offline_ai.py           # On-device local neural engine
-│   │       ├── online_ai.py            # Cloud intelligence & deep research
-│   │       ├── tutor_service.py        # Educational pedagogy & quiz generation
+│   │       ├── llm.py                  # AI provider abstraction (Local/Cloud/OpenRouter)
+│   │       ├── offline_ai.py           # On-device cognitive engine (fallback responses)
+│   │       ├── tutor.py                # Educational pedagogy & quiz generation
 │   │       ├── pdf_processor.py        # PDF extraction & chunk indexing
 │   │       ├── vector_store.py         # FAISS vector similarity search
-│   │       ├── voice_service.py        # Speech-to-text & audio processing
-│   │       └── memory_service.py       # User memory & preference retention
+│   │       ├── voice.py                # Speech-to-text & audio processing
+│   │       └── memory.py              # User memory & preference retention
+│   ├── data/                           # Runtime data (db, materials, vectors, voice)
 │   ├── tests/                          # Automated backend & endpoint test suites
 │   ├── requirements.txt                # Python dependencies
-│   └── .env.example                    # Environment variable template
+│   └── .env                            # Environment variables (API keys, config)
 ├── frontend/
 │   ├── index.html                      # Single-page mobile app shell
 │   ├── styles.css                      # Modern monochrome design system
-│   └── app.js                          # Client-side engine & UI reactivity
+│   ├── app.js                          # Client-side engine & UI reactivity
+│   ├── sw.js                           # PWA Service Worker (offline caching)
+│   └── manifest.json                   # PWA manifest for installable app
 ├── supabase_schema.sql                 # PostgreSQL / pgvector schema (14 tables & RLS)
 ├── start_oryqen.bat                    # One-click Windows launch script
 └── README.md

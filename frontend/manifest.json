@@ -3,10 +3,11 @@
   "short_name": "ORYQEN",
   "description": "Advanced dual-purpose AI assistant and intelligent offline/online educational tutor.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#07090e",
-  "theme_color": "#07090e",
+  "theme_color": "#4f46e5",
   "categories": ["education", "productivity", "utilities"],
   "icons": [
     {

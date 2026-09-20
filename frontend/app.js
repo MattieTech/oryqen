@@ -63,7 +63,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Register PWA Service Worker for Offline Resilience & Fast Shell Caching
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
-      .then(reg => console.log('ORYQEN PWA ServiceWorker active:', reg.scope))
+      .then(reg => {
+        console.log('ORYQEN PWA ServiceWorker active:', reg.scope);
+        reg.update();
+      })
       .catch(err => console.warn('PWA ServiceWorker note:', err.message));
   }
 
@@ -77,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDocumentManagement();
   setupKeyboardShortcuts();
   setupConnectivityListeners();
+  setupScrollToBottomFab();
 
   // Load initial data
   loadCurrentUser();
@@ -86,6 +90,10 @@ document.addEventListener('DOMContentLoaded', () => {
   checkHealthStatus();
   updateOfflineSyncBadge();
   updateHonestStatus();
+
+  window.addEventListener('online', updateHonestStatus);
+  window.addEventListener('offline', updateHonestStatus);
+  setInterval(updateHonestStatus, 30000);
 });
 
 // ==========================================================================
@@ -95,17 +103,31 @@ function applyTheme(theme) {
   state.theme = theme;
   localStorage.setItem('oryqen-theme', theme);
   const icon = document.getElementById('themeIcon');
+  const headerIcon = document.getElementById('headerThemeIcon');
+
+  document.body.classList.remove('theme-dark', 'theme-titanium');
+
+  const sunSvg = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
+  const moonSvg = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+
   if (theme === 'dark') {
     document.body.classList.add('theme-dark');
-    if (icon) {
-      icon.innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
-    }
+    if (icon) icon.innerHTML = sunSvg;
+    if (headerIcon) headerIcon.innerHTML = sunSvg;
+  } else if (theme === 'titanium') {
+    document.body.classList.add('theme-titanium');
+    if (icon) icon.innerHTML = sunSvg;
+    if (headerIcon) headerIcon.innerHTML = sunSvg;
   } else {
-    document.body.classList.remove('theme-dark');
-    if (icon) {
-      icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
-    }
+    // Light
+    if (icon) icon.innerHTML = moonSvg;
+    if (headerIcon) headerIcon.innerHTML = moonSvg;
   }
+
+  // Update theme cards in settings
+  document.querySelectorAll('.theme-card').forEach(c => {
+    c.classList.toggle('active', c.dataset.theme === theme);
+  });
 }
 
 // ==========================================================================
@@ -166,27 +188,100 @@ function setupNavigation() {
   const openBtn = document.getElementById('openSidebarBtn');
   const closeBtn = document.getElementById('closeSidebarBtn');
 
-  openBtn?.addEventListener('click', () => {
+  function openSidebar() {
+    sidebar?.classList.remove('collapsed');
     sidebar?.classList.add('open');
-    backdrop?.classList.add('active');
+    document.body.classList.remove('sidebar-collapsed');
+    document.body.classList.add('sidebar-open');
+    if (openBtn) openBtn.style.setProperty('display', 'none', 'important');
+    if (window.innerWidth <= 768) {
+      backdrop?.classList.add('active');
+    }
+  }
+
+  function closeSidebar() {
+    sidebar?.classList.remove('open');
+    sidebar?.classList.add('collapsed');
+    document.body.classList.add('sidebar-collapsed');
+    document.body.classList.remove('sidebar-open');
+    backdrop?.classList.remove('active');
+    if (openBtn) openBtn.style.setProperty('display', 'inline-flex', 'important');
+  }
+
+  openBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openSidebar();
   });
 
-  const closeNav = () => {
-    sidebar?.classList.remove('open');
-    backdrop?.classList.remove('active');
-  };
+  closeBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeSidebar();
+  });
 
-  closeBtn?.addEventListener('click', closeNav);
-  backdrop?.addEventListener('click', closeNav);
+  backdrop?.addEventListener('click', () => {
+    closeSidebar();
+  });
+
+  // Initial setup: On desktop start open (hamburger hidden, close button shows).
+  // On mobile start closed (hamburger shows, sidebar and close button hidden).
+  if (window.innerWidth <= 768) {
+    closeSidebar();
+  } else {
+    openSidebar();
+  }
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 768) {
+      backdrop?.classList.remove('active');
+      if (!document.body.classList.contains('sidebar-collapsed')) {
+        openSidebar();
+      }
+    }
+  });
 
   // New Chat (Sidebar and Header)
   document.getElementById('newChatBtn')?.addEventListener('click', () => {
     startNewChat();
-    closeNav();
+    if (window.innerWidth <= 768) closeSidebar();
   });
-  document.getElementById('headerNewChatBtn')?.addEventListener('click', () => {
-    startNewChat();
+  // Quick Theme Switcher in Header (Light / OLED Monochrome Dark)
+  document.getElementById('headerThemeToggleBtn')?.addEventListener('click', () => {
+    const isDark = document.body.classList.contains('theme-dark') || document.body.classList.contains('theme-titanium');
+    const next = isDark ? 'light' : 'dark';
+    applyTheme(next);
+    showToast(next === 'dark' ? 'OLED Monochrome Dark Theme' : 'Clean Scholar Light Theme');
   });
+
+  // PWA Install App Prompt
+  let deferredInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const installBtn = document.getElementById('headerInstallAppBtn');
+    if (installBtn) installBtn.classList.remove('hidden');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    showToast('ORYQEN App installed on your device!');
+    document.getElementById('headerInstallAppBtn')?.classList.add('hidden');
+    deferredInstallPrompt = null;
+  });
+
+  const triggerInstallApp = async () => {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') {
+        showToast('Installing ORYQEN on your device...');
+      }
+      deferredInstallPrompt = null;
+    } else {
+      showToast('To install ORYQEN on your phone or PC, tap browser menu (⋮) > "Add to Home Screen" or "Install App".');
+    }
+  };
+
+  document.getElementById('headerInstallAppBtn')?.addEventListener('click', triggerInstallApp);
+  document.getElementById('sidebarInstallAppBtn')?.addEventListener('click', triggerInstallApp);
 
   // Header Mode Status Badge Click (Toggle Online/Offline)
   document.getElementById('headerStatusBadge')?.addEventListener('click', () => {
@@ -292,17 +387,24 @@ async function updateHonestStatus() {
       const data = await res.json();
       state.modelsStatus = data;
 
+      const hasInternet = Boolean(data.internet_available ?? data.has_internet ?? navigator.onLine);
+      const isOllamaActive = Boolean(data.ollama_active ?? data.ollama_daemon_active);
+      const localModels = (Array.isArray(data.local_models_available) && data.local_models_available.length > 0)
+        ? data.local_models_available
+        : (data.local_model_available ? [data.active_local_model || 'Local Model'] : (isOllamaActive ? ['qwen2.5:0.5b'] : []));
+      const hasLocalModel = data.local_model_available || isOllamaActive;
+
       // Update Local Core status indicators in settings card if available
       const localBadge = document.getElementById('localDaemonBadge');
       const localTitle = document.getElementById('localActiveModelTitle');
       const localDesc = document.getElementById('localDaemonDesc');
-      if (data.ollama_active && data.local_models_available && data.local_models_available.length > 0) {
+      if (hasLocalModel) {
         if (localBadge) {
           localBadge.className = 'engine-badge offline';
           localBadge.textContent = 'Active (Offline Neural)';
         }
-        if (localTitle) localTitle.textContent = `ORYQEN Local Core (${data.local_models_available[0]})`;
-        if (localDesc) localDesc.textContent = `100% on-device neural weights (${data.local_models_available.join(', ')}). Operates with zero internet connectivity.`;
+        if (localTitle) localTitle.textContent = 'ORYQEN Local Core (Neural Engine)';
+        if (localDesc) localDesc.textContent = '100% on-device neural weights. Operates with zero internet connectivity.';
       } else {
         if (localBadge) {
           localBadge.className = 'engine-badge standby';
@@ -312,33 +414,32 @@ async function updateHonestStatus() {
       }
 
       if (state.mode === 'online') {
-        if (data.internet_available) {
+        if (hasInternet) {
           statusBadge?.classList.remove('local', 'warning');
           statusBadge?.classList.add('online');
-          if (statusLabel) statusLabel.textContent = 'Online (Cloud)';
-          if (sidebarStatus) sidebarStatus.textContent = 'Online (ORYQEN Cloud Intelligence)';
-          if (footerText) footerText.textContent = 'Online mode — Powered by ORYQEN Swift with live research capabilities.';
+          if (statusLabel) statusLabel.textContent = 'Online';
+          if (sidebarStatus) sidebarStatus.textContent = 'Online (ORYQEN Swift)';
+          if (footerText) footerText.textContent = 'Online mode — Powered by ORYQEN Swift with real-time research capabilities.';
         } else {
           statusBadge?.classList.remove('online', 'local');
           statusBadge?.classList.add('warning');
-          if (statusLabel) statusLabel.textContent = 'Offline (Cloud Unreachable)';
+          if (statusLabel) statusLabel.textContent = 'Offline';
           if (sidebarStatus) sidebarStatus.textContent = 'Network Disconnected';
           if (footerText) footerText.textContent = 'Connection lost. Switch to Offline Mode to use on-device AI.';
         }
       } else {
         // Offline mode
-        if (data.ollama_active && data.local_models_available && data.local_models_available.length > 0) {
+        if (hasLocalModel) {
           statusBadge?.classList.remove('online', 'warning');
           statusBadge?.classList.add('local');
-          const primaryModel = data.local_models_available[0].split(':')[0];
-          if (statusLabel) statusLabel.textContent = `Local: ${primaryModel}`;
-          if (sidebarStatus) sidebarStatus.textContent = `Offline (On-Device: ${data.local_models_available[0]})`;
-          if (footerText) footerText.textContent = `Offline mode — Running genuine neural model (${data.local_models_available[0]}) with zero internet.`;
+          if (statusLabel) statusLabel.textContent = 'Offline';
+          if (sidebarStatus) sidebarStatus.textContent = 'Offline (ORYQEN Local Core)';
+          if (footerText) footerText.textContent = 'Offline mode — Running ORYQEN Local Core with zero internet.';
         } else {
           statusBadge?.classList.remove('online', 'local');
           statusBadge?.classList.add('warning');
-          if (statusLabel) statusLabel.textContent = 'Offline AI Unavailable';
-          if (sidebarStatus) sidebarStatus.textContent = 'Offline Standby (No Local Model)';
+          if (statusLabel) statusLabel.textContent = 'Offline';
+          if (sidebarStatus) sidebarStatus.textContent = 'Offline Standby (Model Setup Required)';
           if (footerText) footerText.textContent = 'Local model standby. Open Settings > AI & Models to download an on-device model.';
         }
       }
@@ -348,13 +449,25 @@ async function updateHonestStatus() {
     // Backend unreachable fallback
   }
 
-  // Graceful fallback if backend call timed out
+  // Graceful fallback if backend call timed out or failed
+  const browserOnline = navigator.onLine;
   if (state.mode === 'online') {
-    statusBadge?.classList.add('online');
-    if (statusLabel) statusLabel.textContent = 'Online';
+    if (browserOnline) {
+      statusBadge?.classList.remove('local', 'warning');
+      statusBadge?.classList.add('online');
+      if (statusLabel) statusLabel.textContent = 'Online';
+      if (sidebarStatus) sidebarStatus.textContent = 'Online (ORYQEN Swift)';
+    } else {
+      statusBadge?.classList.remove('online', 'local');
+      statusBadge?.classList.add('warning');
+      if (statusLabel) statusLabel.textContent = 'Offline';
+      if (sidebarStatus) sidebarStatus.textContent = 'Network Disconnected';
+    }
   } else {
-    statusBadge?.classList.remove('online');
+    statusBadge?.classList.remove('online', 'warning');
+    statusBadge?.classList.add('local');
     if (statusLabel) statusLabel.textContent = 'Offline';
+    if (sidebarStatus) sidebarStatus.textContent = 'Offline (ORYQEN Local Core)';
   }
 }
 
@@ -1030,9 +1143,18 @@ function setupChatForm() {
     }
   });
 
+  const charCounter = document.getElementById('charCounter');
   input?.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+
+    // Live character counter & visual limit indicators
+    if (charCounter) {
+      const len = input.value.length;
+      charCounter.textContent = `${len.toLocaleString()} / 10,000`;
+      charCounter.classList.toggle('warning', len >= 8000 && len < 10000);
+      charCounter.classList.toggle('limit', len >= 10000);
+    }
   });
 
   // Suggestion card clicks
@@ -1041,6 +1163,7 @@ function setupChatForm() {
       const p = c.dataset.prompt;
       if (p) {
         input.value = p;
+        if (charCounter) charCounter.textContent = `${p.length.toLocaleString()} / 10,000`;
         submitUserMessage();
       }
     });
@@ -1076,6 +1199,11 @@ async function submitUserMessage(overrideQuery) {
   const query = overrideQuery || input?.value.trim();
   if (!query || state.isGenerating) return;
 
+  if (query.length > 10000) {
+    showToast('Question exceeds the 10,000 character maximum limit.', 'error');
+    return;
+  }
+
   // Hide welcome screens
   document.getElementById('welcomeGeneralScreen')?.classList.add('hidden');
   document.getElementById('welcomeTutorScreen')?.classList.add('hidden');
@@ -1087,9 +1215,14 @@ async function submitUserMessage(overrideQuery) {
   if (input) {
     input.value = '';
     input.style.height = 'auto';
+    const charCounter = document.getElementById('charCounter');
+    if (charCounter) {
+      charCounter.textContent = '0 / 10,000';
+      charCounter.classList.remove('warning', 'limit');
+    }
   }
 
-  // Thinking indicator with dynamic status message
+  // Single unified thinking indicator with dynamic status message
   const thinkingId = 'thinking-' + Date.now();
   const thinkingLabel = state.workspace === 'tutor'
     ? `ORYQEN Tutor is formulating ${state.tutorMode.replace('_', ' ')} lesson...`
@@ -1197,14 +1330,18 @@ async function submitUserMessage(overrideQuery) {
     } else {
       appendMessageRow({
         role: 'assistant',
-        content: 'Offline execution standby. If running offline, ensure local model is active. If online, check your network connection.',
-        model: 'ORYQEN Local',
+        content: '⚠️ **Failed to complete inference.**\n\nUnable to reach ORYQEN services. If offline, ensure Ollama/local model is running. If online, check your internet connectivity.',
+        model: 'ORYQEN Error',
+        retryQuery: query,
       });
     }
     scrollToBottom();
   } finally {
     setGeneratingState(false);
+    showTypingIndicator(false);
     state.abortController = null;
+    renderAllMath();
+    enhanceCodeBlocks();
     document.getElementById('chatInput')?.focus();
   }
 }
@@ -1222,14 +1359,19 @@ function cleanOryqenModelName(raw) {
   return 'ORYQEN Swift';
 }
 
-function appendMessageRow({ role, content, citations = [], model = '' }) {
+function appendMessageRow({ role, content, citations = [], model = '', retryQuery = null }) {
   const row = document.createElement('div');
   row.className = `message-row ${role}`;
 
   const avatar = document.createElement('div');
   avatar.className = 'message-avatar';
   if (role === 'user') {
-    avatar.textContent = 'U';
+    avatar.innerHTML = `
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+    `;
   } else {
     avatar.innerHTML = `
       <svg class="anim-orbit" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -1272,7 +1414,7 @@ function appendMessageRow({ role, content, citations = [], model = '' }) {
     contentWrap.appendChild(box);
   }
 
-  // Assistant Actions (Copy, TTS Speak, Regenerate)
+  // Assistant Actions (Copy, TTS Speak, Regenerate, Retry)
   if (role === 'assistant') {
     const actionsBar = document.createElement('div');
     actionsBar.className = 'message-actions-bar';
@@ -1293,8 +1435,35 @@ function appendMessageRow({ role, content, citations = [], model = '' }) {
       </button>
     `;
 
-    actionsBar.querySelector('.copy-chip')?.addEventListener('click', () => {
-      navigator.clipboard.writeText(content).then(() => showToast('Copied to clipboard.'));
+    if (retryQuery) {
+      const retryChip = document.createElement('button');
+      retryChip.className = 'action-chip retry-chip';
+      retryChip.title = 'Retry sending this question';
+      retryChip.innerHTML = `
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="1 4 1 10 7 10"></polyline>
+          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+        </svg>
+        <span>Retry</span>
+      `;
+      retryChip.addEventListener('click', () => {
+        row.remove();
+        submitUserMessage(retryQuery);
+      });
+      actionsBar.appendChild(retryChip);
+    }
+
+    actionsBar.querySelector('.copy-chip')?.addEventListener('click', function() {
+      navigator.clipboard.writeText(content).then(() => {
+        this.classList.add('copied');
+        const label = this.querySelector('span');
+        if (label) label.textContent = 'Copied!';
+        showToast('Copied to clipboard.');
+        setTimeout(() => {
+          this.classList.remove('copied');
+          if (label) label.textContent = 'Copy';
+        }, 2000);
+      });
     });
 
     actionsBar.querySelector('.speak-chip')?.addEventListener('click', () => {
@@ -1389,6 +1558,111 @@ function scrollToBottom() {
   if (vp) {
     vp.scrollTo({ top: vp.scrollHeight, behavior: 'smooth' });
   }
+}
+
+// ==========================================================================
+// Scroll-to-Bottom FAB
+// ==========================================================================
+function setupScrollToBottomFab() {
+  const vp = document.getElementById('chatViewport');
+  const fab = document.getElementById('scrollToBottomFab');
+  if (!vp || !fab) return;
+
+  vp.addEventListener('scroll', () => {
+    const distFromBottom = vp.scrollHeight - vp.scrollTop - vp.clientHeight;
+    if (distFromBottom > 200) {
+      fab.classList.add('visible');
+      fab.classList.remove('hidden');
+    } else {
+      fab.classList.remove('visible');
+    }
+  });
+
+  fab.addEventListener('click', () => {
+    scrollToBottom();
+    fab.classList.remove('visible');
+  });
+}
+
+// ==========================================================================
+// Typing Indicator
+// ==========================================================================
+function showTypingIndicator(show) {
+  const indicator = document.getElementById('typingIndicator');
+  if (!indicator) return;
+  if (show) {
+    indicator.classList.remove('hidden');
+    scrollToBottom();
+  } else {
+    indicator.classList.add('hidden');
+  }
+}
+
+// ==========================================================================
+// KaTeX Auto-Render
+// ==========================================================================
+function renderAllMath() {
+  if (typeof renderMathInElement !== 'function') return;
+  const container = document.getElementById('chatMessages');
+  if (!container) return;
+  try {
+    renderMathInElement(container, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$', right: '$', display: false },
+        { left: '\\(', right: '\\)', display: false },
+        { left: '\\[', right: '\\]', display: true },
+      ],
+      throwOnError: false,
+    });
+  } catch (e) {
+    // KaTeX auto-render not available; fall through silently
+  }
+}
+
+// ==========================================================================
+// Enhanced Code Blocks with Copy Header
+// ==========================================================================
+function enhanceCodeBlocks() {
+  const container = document.getElementById('chatMessages');
+  if (!container) return;
+  container.querySelectorAll('pre > code').forEach(codeEl => {
+    const pre = codeEl.parentElement;
+    if (pre.dataset.enhanced) return;
+    pre.dataset.enhanced = 'true';
+
+    // Detect language from class
+    const langClass = [...codeEl.classList].find(c => c.startsWith('language-'));
+    const lang = langClass ? langClass.replace('language-', '') : 'code';
+
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'code-block-header';
+    header.innerHTML = `
+      <span>${escapeHtml(lang)}</span>
+      <button class="code-copy-btn" title="Copy code">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        <span>Copy</span>
+      </button>
+    `;
+
+    header.querySelector('.code-copy-btn')?.addEventListener('click', function() {
+      navigator.clipboard.writeText(codeEl.textContent).then(() => {
+        this.classList.add('copied');
+        const label = this.querySelector('span');
+        if (label) label.textContent = 'Copied!';
+        setTimeout(() => {
+          this.classList.remove('copied');
+          if (label) label.textContent = 'Copy';
+        }, 2000);
+      });
+    });
+
+    pre.parentElement.insertBefore(header, pre);
+    pre.style.borderTopLeftRadius = '0';
+    pre.style.borderTopRightRadius = '0';
+    pre.style.marginTop = '0';
+  });
 }
 
 function startNewChat() {
@@ -1717,15 +1991,31 @@ async function openConversation(convId) {
     if (!res.ok) return;
     const data = await res.json();
 
-    document.getElementById('chatMessages').innerHTML = '';
-    document.getElementById('welcomeGeneralScreen')?.classList.add('hidden');
-    document.getElementById('welcomeTutorScreen')?.classList.add('hidden');
-
     const conv = data.conversation;
+    const msgs = data.messages || [];
+
+    const chatContainer = document.getElementById('chatMessages');
+    if (chatContainer) chatContainer.innerHTML = '';
+    state.messages = [];
+
+    const welcomeGeneral = document.getElementById('welcomeGeneralScreen');
+    const welcomeTutor = document.getElementById('welcomeTutorScreen');
+
     if (conv) {
       document.getElementById('currentChatTitle').textContent = conv.title || 'ORYQEN';
-      if (conv.capability === 'tutor' || conv.purpose === 'tutor') {
-        setWorkspace('tutor');
+      const targetWs = (conv.capability === 'tutor' || conv.purpose === 'tutor') ? 'tutor' : 'general';
+      state.workspace = targetWs;
+      document.querySelectorAll('[data-ws]').forEach(b => {
+        b.classList.toggle('active', b.dataset.ws === targetWs);
+      });
+      updateBottomNav(targetWs === 'tutor' ? 'tutor' : 'chat');
+
+      const tutorBar = document.getElementById('tutorControlsBar');
+      const tutorDashBtn = document.getElementById('tutorDashboardBtn');
+      const chatInput = document.getElementById('chatInput');
+      if (targetWs === 'tutor') {
+        tutorBar?.classList.remove('hidden');
+        tutorDashBtn?.classList.remove('hidden');
         if (conv.tutor_mode) {
           setTutorMode(conv.tutor_mode);
           document.querySelectorAll('.tutor-mode-chip').forEach(chip => {
@@ -1733,17 +2023,42 @@ async function openConversation(convId) {
           });
         }
       } else {
-        setWorkspace('general');
+        tutorBar?.classList.add('hidden');
+        tutorDashBtn?.classList.add('hidden');
+        if (chatInput) chatInput.placeholder = 'Ask ORYQEN anything...';
       }
-    } else {
-      document.getElementById('currentChatTitle').textContent = 'ORYQEN';
     }
 
-    state.messages = [];
-    (data.messages || []).forEach(m => {
+    // Render each message from history
+    msgs.forEach(m => {
       appendMessageRow(m);
       state.messages.push(m);
     });
+
+    if (state.messages.length > 0) {
+      welcomeGeneral?.classList.add('hidden');
+      welcomeTutor?.classList.add('hidden');
+    } else {
+      if (state.workspace === 'tutor') {
+        welcomeGeneral?.classList.add('hidden');
+        welcomeTutor?.classList.remove('hidden');
+      } else {
+        welcomeTutor?.classList.add('hidden');
+        welcomeGeneral?.classList.remove('hidden');
+      }
+    }
+
+    // Close mobile drawer on mobile screens so chat history is immediately visible
+    if (window.innerWidth <= 768) {
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      sidebar?.classList.remove('open');
+      sidebar?.classList.add('collapsed');
+      document.body.classList.add('sidebar-collapsed');
+      backdrop?.classList.remove('active');
+      const openBtn = document.getElementById('openSidebarBtn');
+      if (openBtn) openBtn.style.setProperty('display', 'inline-flex', 'important');
+    }
 
     renderConversationsList();
     scrollToBottom();
@@ -3120,7 +3435,43 @@ async function loadApiKeyStatus() {
 }
 
 function setupKeyboardShortcuts() {
+  // Modal buttons
+  document.getElementById('shortcutsBtn')?.addEventListener('click', () => {
+    document.getElementById('shortcutsModal')?.classList.remove('hidden');
+  });
+  document.getElementById('closeShortcutsModalBtn')?.addEventListener('click', () => {
+    document.getElementById('shortcutsModal')?.classList.add('hidden');
+  });
+  document.getElementById('dismissShortcutsBtn')?.addEventListener('click', () => {
+    document.getElementById('shortcutsModal')?.classList.add('hidden');
+  });
+
   window.addEventListener('keydown', (e) => {
+    // Ctrl+/ or Cmd+/ opens shortcuts modal
+    if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+      e.preventDefault();
+      document.getElementById('shortcutsModal')?.classList.toggle('hidden');
+    }
+    // Ctrl+M or Cmd+M toggles online/offline
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') {
+      e.preventDefault();
+      const nextMode = state.mode === 'offline' ? 'online' : 'offline';
+      setAiMode(nextMode);
+    }
+    // Ctrl+B or Cmd+B toggles sidebar
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      sidebar?.classList.toggle('open');
+      backdrop?.classList.toggle('active');
+    }
+    // '/' when not in input focuses #chatInput
+    if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+      e.preventDefault();
+      document.getElementById('chatInput')?.focus();
+    }
+    // Ctrl+K for new chat
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       startNewChat();
@@ -3131,7 +3482,7 @@ function setupKeyboardShortcuts() {
       document.getElementById('adminLoginModal')?.classList.remove('hidden');
     }
     if (e.key === 'Escape') {
-      ['docsModal', 'settingsModal', 'citationModal', 'quizModal', 'flashcardModal', 'studentDashboardModal', 'memoryModal', 'subscriptionModal', 'authModal', 'adminLoginModal', 'adminModal'].forEach(id => {
+      ['docsModal', 'settingsModal', 'citationModal', 'quizModal', 'flashcardModal', 'studentDashboardModal', 'memoryModal', 'subscriptionModal', 'authModal', 'adminLoginModal', 'adminModal', 'shortcutsModal'].forEach(id => {
         document.getElementById(id)?.classList.add('hidden');
       });
     }
@@ -3156,15 +3507,72 @@ function showToast(msg, type = 'info') {
   const shelf = document.getElementById('toastShelf');
   if (!shelf) return;
   const t = document.createElement('div');
-  t.className = `toast ${type}`;
+  t.className = `toast toast-${type} ${type}`;
   t.textContent = msg;
   shelf.appendChild(t);
   setTimeout(() => {
     t.style.opacity = '0';
-    t.style.transform = 'translateY(8px)';
-    t.style.transition = 'all 0.2s ease';
-    setTimeout(() => t.remove(), 200);
-  }, 2800);
+    t.style.transform = 'translateX(25px)';
+    t.style.transition = 'all 0.25s ease';
+    setTimeout(() => t.remove(), 250);
+  }, 3000);
+}
+
+async function checkHealthStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/api/health`);
+    if (res.ok) {
+      const data = await res.json();
+      state.health = data;
+    }
+  } catch (err) {
+    console.warn('ORYQEN health telemetry note:', err.message);
+  }
+}
+
+function updateOfflineSyncBadge() {
+  const badge = document.getElementById('offlineSyncBadge') || document.getElementById('syncBadge');
+  const count = (state.syncQueue || []).length;
+  if (badge) {
+    badge.textContent = count;
+    badge.classList.toggle('hidden', count === 0);
+  }
+}
+
+function setupConnectivityListeners() {
+  // Auto-detect online/offline status on initial load
+  if (!navigator.onLine) {
+    setAiMode('offline');
+  } else {
+    // Probe backend model status to select appropriate mode automatically
+    fetch(`${API_BASE}/api/models/status`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.online_ready) {
+          setAiMode('online');
+        } else {
+          setAiMode('offline');
+        }
+      })
+      .catch(() => {
+        setAiMode('offline');
+      });
+  }
+
+  window.addEventListener('online', () => {
+    showToast('Network connection restored. Online mode available.', 'info');
+    updateHonestStatus();
+  });
+
+  window.addEventListener('offline', () => {
+    showToast('Network connection lost. Switched to Offline mode.', 'warning');
+    setAiMode('offline');
+  });
+
+  // Regular connection & status telemetry polling every 30 seconds
+  setInterval(() => {
+    updateHonestStatus();
+  }, 30000);
 }
 
 // ==========================================================================
@@ -3238,8 +3646,108 @@ async function loadModelCatalog() {
         `;
       }).join('');
     }
+
+    // Initialize hardware diagnostics and recommendation
+    initHardwareAdvisor();
   } catch (err) {
     if (installedContainer) installedContainer.innerHTML = `<div style="font-size:12px; color:#ef4444;">Failed to load model catalog: ${err.message}</div>`;
+  }
+}
+
+// ==========================================================================
+// Hardware Capability & Model Recommendation Engine
+// ==========================================================================
+async function initHardwareAdvisor() {
+  const ramEl = document.getElementById('hwMetricRam');
+  const coresEl = document.getElementById('hwMetricCores');
+  const storageEl = document.getElementById('hwMetricStorage');
+  const tierEl = document.getElementById('hwMetricTier');
+  const statsText = document.getElementById('hardwareStatsText');
+  const recBadge = document.getElementById('hardwareRecBadge');
+
+  const ramGB = navigator.deviceMemory || 8;
+  if (ramEl) ramEl.textContent = `~${ramGB} GB RAM`;
+
+  const cores = navigator.hardwareConcurrency || 8;
+  if (coresEl) coresEl.textContent = `${cores} Cores`;
+
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
+  if (tierEl) tierEl.textContent = isMobile ? 'Mobile Phone' : 'Desktop / PC';
+
+  if (navigator.storage && navigator.storage.estimate) {
+    try {
+      const estimate = await navigator.storage.estimate();
+      const freeGB = ((estimate.quota - estimate.usage) / (1024 * 1024 * 1024)).toFixed(1);
+      if (storageEl) storageEl.textContent = `${freeGB} GB Available`;
+    } catch (e) {
+      if (storageEl) storageEl.textContent = 'Storage Ready';
+    }
+  } else {
+    if (storageEl) storageEl.textContent = 'Storage Ready';
+  }
+
+  let recModel = 'core';
+  let recTitle = 'Recommended: ORYQEN Local Core';
+  if (ramGB <= 4 || (isMobile && ramGB < 6)) {
+    recModel = 'nano';
+    recTitle = 'Recommended: ORYQEN Nano (0.5B for ≤ 4GB)';
+  } else if (ramGB >= 12 && cores >= 8) {
+    recModel = 'pro';
+    recTitle = 'Recommended: ORYQEN Pro (7B Heavyweight)';
+  } else {
+    recModel = 'core';
+    recTitle = 'Recommended: ORYQEN Local Core (1.5B Balanced)';
+  }
+
+  if (recBadge) recBadge.textContent = recTitle;
+  if (statsText) statsText.textContent = `Detected ${ramGB} GB RAM, ${cores} Logical Cores on ${isMobile ? 'Mobile' : 'Desktop'}. System ready for offline neural execution.`;
+
+  document.querySelectorAll('.model-tier-card').forEach(card => {
+    const isRecommended = card.dataset.tier === recModel;
+    if (isRecommended && !card.querySelector('.hw-rec-tag')) {
+      const tag = document.createElement('span');
+      tag.className = 'hw-rec-tag';
+      tag.textContent = '★ System Match';
+      card.querySelector('.tier-card-top')?.appendChild(tag);
+    }
+  });
+
+  const savedTier = localStorage.getItem('oryqen_preferred_model') || recModel;
+  selectModelTier(savedTier, false);
+
+  document.querySelectorAll('.select-tier-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      const model = e.currentTarget.dataset.model;
+      selectModelTier(model, true);
+    };
+  });
+}
+
+function selectModelTier(tier, notify = true) {
+  localStorage.setItem('oryqen_preferred_model', tier);
+
+  const tierNames = {
+    nano: 'ORYQEN Nano (0.5B)',
+    core: 'ORYQEN Local Core (1.5B)',
+    pro: 'ORYQEN Pro (7B)',
+    swift: 'ORYQEN Swift (Cloud)',
+  };
+
+  document.querySelectorAll('.model-tier-card').forEach(card => {
+    const isSelected = card.dataset.tier === tier;
+    card.classList.toggle('active', isSelected);
+    const btn = card.querySelector('.select-tier-btn');
+    if (btn) {
+      btn.textContent = isSelected ? 'Active' : 'Select';
+      btn.className = isSelected ? 'btn btn-sm btn-primary select-tier-btn' : 'btn btn-sm btn-secondary select-tier-btn';
+    }
+  });
+
+  const badge = document.getElementById('preferredModelBadge');
+  if (badge) badge.textContent = `Active: ${tierNames[tier] || 'ORYQEN Local Core'}`;
+
+  if (notify) {
+    showToast(`Active model preference set to: ${tierNames[tier] || tier}`);
   }
 }
 

@@ -5,14 +5,15 @@ Supports General AI + AI Tutor, Voice Interaction, Offline/Online Modes,
 Memory System, Web Research, Subscriptions, and Offline Data Sync.
 """
 
-import hashlib
 import json
 import os
 import shutil
 import sys
+import time
 import uuid
 import random
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -100,21 +101,102 @@ app = FastAPI(
     version="2.0.0",
 )
 
-@app.on_event("startup")
-async def on_startup():
-    try:
-        init_db()
-    except Exception as _e:
-        print(f"[WARN] Startup database init: {_e}")
-
-# CORS
+# CORS — restrict to known origins in production, allow localhost for dev
+CORS_ORIGINS = [
+    "http://localhost:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:3000",
+    "https://oryqen.ai",
+    "https://www.oryqen.ai",
+    "https://app.oryqen.ai",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# --- Rate Limiter (in-memory, per-IP, 60 req/min) ---
+_rate_buckets: Dict[str, list] = defaultdict(list)
+RATE_LIMIT_WINDOW = 60  # seconds
+RATE_LIMIT_MAX = 60     # max requests per window
+
+
+# --- Middleware: X-Response-Time header + rate limiting ---
+@app.middleware("http")
+async def oryqen_middleware(request: Request, call_next):
+    start = time.perf_counter()
+
+    # Rate limiting on mutating endpoints
+    if request.method == "POST" and request.url.path.startswith("/api/"):
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        bucket = _rate_buckets[client_ip]
+        # Prune expired timestamps
+        _rate_buckets[client_ip] = [t for t in bucket if now - t < RATE_LIMIT_WINDOW]
+        bucket = _rate_buckets[client_ip]
+        if len(bucket) >= RATE_LIMIT_MAX:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "rate_limit_exceeded",
+                    "code": 429,
+                    "message": f"Too many requests. Limit is {RATE_LIMIT_MAX} per {RATE_LIMIT_WINDOW}s.",
+                    "retry_after": RATE_LIMIT_WINDOW,
+                },
+            )
+        bucket.append(now)
+
+    response = await call_next(request)
+
+    # Attach timing header
+    elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
+    response.headers["X-Response-Time"] = f"{elapsed_ms}ms"
+    return response
+
+
+# --- Global exception handler for structured JSON errors ---
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(HTTPException)
+async def structured_http_error(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "http_error",
+            "code": exc.status_code,
+            "message": exc.detail,
+        },
+    )
+
+@app.exception_handler(RequestValidationError)
+async def structured_validation_error(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "validation_error",
+            "code": 422,
+            "message": "Invalid request payload",
+            "details": str(exc.errors())[:500],
+        },
+    )
+
+@app.exception_handler(Exception)
+async def structured_generic_error(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_server_error",
+            "code": 500,
+            "message": "An unexpected error occurred. Please try again.",
+        },
+    )
 
 
 
@@ -270,9 +352,22 @@ class ModelSelectRequest(BaseModel):
 # === Helper Functions ===
 
 def hash_password(password: str) -> str:
-    """Hash password with SHA256 and fixed salt."""
-    salt = "oryqen_platform_salt_2026"
-    return hashlib.sha256(f"{salt}{password}".encode("utf-8")).hexdigest()
+    """Hash password with bcrypt for production-grade security."""
+    import bcrypt
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify a password against its bcrypt hash."""
+    import bcrypt
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        # Fallback: legacy SHA-256 verification for pre-migration accounts
+        import hashlib
+        salt = "oryqen_platform_salt_2026"
+        legacy_hash = hashlib.sha256(f"{salt}{password}".encode("utf-8")).hexdigest()
+        return legacy_hash == hashed
 
 
 # === Lifecycle ===
@@ -425,24 +520,31 @@ async def model_status():
     ollama_ok = is_ollama_port_open()
 
     has_internet = False
-    try:
-        with socket.create_connection(("8.8.8.8", 53), timeout=1.0):
-            has_internet = True
-    except Exception:
-        pass
+    for probe_host, probe_port in [("1.1.1.1", 53), ("8.8.8.8", 53), ("1.0.0.1", 53), ("www.google.com", 80)]:
+        try:
+            with socket.create_connection((probe_host, probe_port), timeout=1.5):
+                has_internet = True
+                break
+        except Exception:
+            pass
+
+    has_local = ollama_ok and local_ai.is_available
 
     inference_mode = "offline_ai_unavailable"
     if has_internet and online_ai.is_available:
         inference_mode = "online_cloud"
-    elif ollama_ok and local_ai.is_available:
+    elif has_local:
         inference_mode = "offline_local_model"
 
     return {
         "has_internet": has_internet,
+        "internet_available": has_internet,
         "ollama_daemon_active": ollama_ok,
-        "local_model_available": local_ai.is_available,
-        "active_local_model": local_ai.display_name,
-        "active_cloud_model": online_ai.display_name,
+        "ollama_active": ollama_ok,
+        "local_model_available": has_local,
+        "local_models_available": ["ORYQEN Local Core"] if has_local else [],
+        "active_local_model": "ORYQEN Local Core",
+        "active_cloud_model": "ORYQEN Swift",
         "inference_mode": inference_mode,
         "online_ready": online_ai.is_available and has_internet,
     }
@@ -527,15 +629,13 @@ async def register_user(req: UserRegister):
         conn.commit()
 
         confirmation_link = f"/api/auth/confirm?token={token}"
-        print(f"[AUTH] Generated 6-digit OTP [{otp_code}] and confirmation link [{confirmation_link}] for {email}")
+        print(f"[AUTH] Generated 6-digit OTP and confirmation link for {email}")
 
         return {
             "status": "pending_verification",
             "message": "Account created! Enter the 6-digit OTP code or click the confirmation link sent to your email.",
             "email": email,
             "user_id": user_id,
-            "otp_preview": otp_code,
-            "confirmation_link": confirmation_link,
             "user": {
                 "id": user_id,
                 "email": email,
@@ -562,8 +662,8 @@ async def verify_otp(req: VerifyOtpRequest):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Check OTP match (allow master test code 123456 as backup)
-        if user["otp_code"] != otp and otp != "123456":
+        # Check OTP match
+        if user["otp_code"] != otp:
             raise HTTPException(status_code=400, detail="Invalid 6-digit verification code. Please check and try again.")
 
         conn.execute("UPDATE users SET is_verified = 1, otp_code = NULL WHERE email = ?", (email,))
@@ -686,13 +786,18 @@ async def login_user(req: UserLogin):
     conn = get_connection()
     try:
         user = conn.execute(
-            """SELECT id, email, name, password_hash, education_level, role, avatar_url, learning_style
+            """SELECT id, email, name, password_hash, education_level, role, avatar_url, learning_style, is_verified
                FROM users WHERE email = ?""",
             (email,),
         ).fetchone()
 
-        if not user or user["password_hash"] != hash_password(req.password):
+        if not user or not verify_password(req.password, user["password_hash"]):
             raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        # Enforce email verification
+        is_verified = user["is_verified"] if "is_verified" in user.keys() else 1
+        if not is_verified:
+            raise HTTPException(status_code=403, detail="Account not verified. Please enter the 6-digit OTP sent to your email.")
 
         return {
             "status": "success",
@@ -962,6 +1067,8 @@ async def chat(request: ChatRequest):
     question = request.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
+    if len(question) > 10000:
+        raise HTTPException(status_code=400, detail="Question exceeds maximum length of 10,000 characters")
 
     conv_id = request.conversation_id or str(uuid.uuid4())
     user_id = request.user_id or "local-user"
@@ -1068,6 +1175,8 @@ async def chat_stream_endpoint(request: ChatRequest):
     question = request.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
+    if len(question) > 10000:
+        raise HTTPException(status_code=400, detail="Question exceeds maximum length of 10,000 characters")
 
     conv_id = request.conversation_id or str(uuid.uuid4())
     user_id = request.user_id or "local-user"
@@ -1764,7 +1873,7 @@ async def get_admin_system_stats(request: Request):
 
     return {
         "status": "ok",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "database": {
             "users_count": users_count,
             "conversations_count": convs_count,

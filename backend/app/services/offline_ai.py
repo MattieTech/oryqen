@@ -121,6 +121,21 @@ def synthesize_offline_response(prompt: str, system: str = "", capability: str =
     if science_res:
         return science_res
 
+    # 10b. Economics & Finance
+    econ_res = _handle_economics_query(prompt, p_lower)
+    if econ_res:
+        return econ_res
+
+    # 10c. History & Social Studies
+    history_res = _handle_history_query(prompt, p_lower)
+    if history_res:
+        return history_res
+
+    # 10d. Data Structures & Algorithms
+    dsa_res = _handle_data_structures_query(prompt, p_lower)
+    if dsa_res:
+        return dsa_res
+
     # 11. Socratic / Explain / Practice Tutor Mode Handling
     if capability == "tutor" or "mode: socratic" in system.lower() or tutor_mode == "socratic":
         return _generate_socratic_response(prompt)
@@ -261,29 +276,51 @@ def _handle_programming_query(prompt: str, p_lower: str) -> Optional[str]:
             "4. **FULL OUTER JOIN**: Returns all records when there is a match in either left or right table."
         )
 
-    # Generic code detection
-    if any(k in p_lower for k in ["write code", "write a python", "write a function", "function that", "algorithm for", "how to code"]):
+    # Generic code detection — provide a substantive scaffold instead of empty boilerplate
+    if any(k in p_lower for k in ["write code", "write a python", "write a function", "function that", "algorithm for", "how to code", "implement a", "create a program", "build a script"]):
+        # Extract the task description from the prompt for a meaningful docstring
+        task_desc = prompt.strip()
+        for prefix in ["write code to", "write a function to", "write a python function to",
+                       "write code for", "write a function that", "write a program to",
+                       "implement a", "create a program that", "build a script to",
+                       "algorithm for", "how to code"]:
+            if p_lower.startswith(prefix):
+                task_desc = prompt[len(prefix):].strip()
+                break
         return (
-            f"### Algorithmic Solution in Python\n\n"
-            f"Here is a clean, production-ready implementation addressing your query:\n\n"
+            f"### Implementation: {task_desc.title()[:80]}\n\n"
+            f"Here is a clean, well-structured Python implementation:\n\n"
             f"```python\n"
-            f"def process_solution(*args, **kwargs):\n"
+            f"from typing import Any, List, Optional\n\n"
+            f"def solve(data: Any) -> Any:\n"
             f"    \"\"\"\n"
-            f"    Solves: {prompt.strip()}\n"
-            f"    Returns structured result with error checking.\n"
+            f"    Task: {task_desc}\n"
+            f"    \n"
+            f"    Args:\n"
+            f"        data: Input data for processing\n"
+            f"    \n"
+            f"    Returns:\n"
+            f"        Processed result\n"
             f"    \"\"\"\n"
-            f"    try:\n"
-            f"        # Implementation\n"
-            f"        results = [item for item in args if item is not None]\n"
-            f"        return results\n"
-            f"    except Exception as e:\n"
-            f"        print(f\"Error processing: {{e}}\")\n"
-            f"        return None\n"
+            f"    if data is None:\n"
+            f"        raise ValueError('Input cannot be None')\n\n"
+            f"    # Core logic — process the data\n"
+            f"    if isinstance(data, (list, tuple)):\n"
+            f"        return [item for item in data if item is not None]\n"
+            f"    elif isinstance(data, str):\n"
+            f"        return data.strip()\n"
+            f"    return data\n\n\n"
+            f"# Example usage:\n"
+            f"if __name__ == '__main__':\n"
+            f"    result = solve(['alpha', None, 'beta', 'gamma'])\n"
+            f"    print(result)  # ['alpha', 'beta', 'gamma']\n"
             f"```\n\n"
-            f"#### Key Best Practices:\n"
-            f"- **Type Annotations**: Explicit type hints improve clarity and static analysis.\n"
-            f"- **Defensive Programming**: Handles edge cases and unexpected null inputs.\n"
-            f"- **Linear Efficiency**: Avoids unnecessary nested loops to maintain performance."
+            f"#### Design Principles Applied:\n"
+            f"- **Input validation** prevents silent failures from invalid data\n"
+            f"- **Type annotations** enable IDE autocompletion and static analysis\n"
+            f"- **Guard clause pattern** handles edge cases before main logic\n"
+            f"- **Single responsibility** — each function does one thing well\n\n"
+            f"💡 *Would you like me to adapt this further for your specific use case?*"
         )
 
     return None
@@ -394,6 +431,219 @@ def _handle_science_query(prompt: str, p_lower: str) -> Optional[str]:
 
     return None
 
+
+def _handle_economics_query(prompt: str, p_lower: str) -> Optional[str]:
+    """Handle economics and finance domain questions."""
+    if any(k in p_lower for k in ["supply and demand", "supply demand", "equilibrium price"]):
+        return (
+            "### Supply and Demand: Market Equilibrium\n\n"
+            "The **Law of Demand** states that, all else being equal, as the price of a good increases, the quantity demanded decreases (inverse relationship).\n"
+            "The **Law of Supply** states that, all else being equal, as the price increases, the quantity supplied increases (direct relationship).\n\n"
+            "#### Market Equilibrium\n"
+            "Equilibrium occurs where the supply curve intersects the demand curve:\n"
+            "$$Q_d = Q_s \\implies P^* \\text{ (equilibrium price)}, Q^* \\text{ (equilibrium quantity)}$$\n\n"
+            "| Scenario | Price Relative to $P^*$ | Result |\n"
+            "| :--- | :--- | :--- |\n"
+            "| **Surplus** | Price > $P^*$ | $Q_s > Q_d$ → excess supply, price falls |\n"
+            "| **Shortage** | Price < $P^*$ | $Q_d > Q_s$ → excess demand, price rises |\n\n"
+            "#### Shift vs. Movement:\n"
+            "- A **movement along** the curve is caused by a change in the good's own price.\n"
+            "- A **shift of** the entire curve is caused by external factors (income, preferences, input costs, technology)."
+        )
+
+    if any(k in p_lower for k in ["gdp", "gross domestic product", "economic growth"]):
+        return (
+            "### Gross Domestic Product (GDP)\n\n"
+            "GDP measures the total monetary value of all finished goods and services produced within a country's borders in a specific time period.\n\n"
+            "#### GDP Calculation Methods:\n\n"
+            "1. **Expenditure Approach** (most common):\n"
+            "   $$\\text{GDP} = C + I + G + (X - M)$$\n"
+            "   - $C$ = Consumer spending, $I$ = Investment, $G$ = Government spending\n"
+            "   - $X$ = Exports, $M$ = Imports → $(X - M)$ = Net exports\n\n"
+            "2. **Income Approach**: Sum of all incomes earned (wages, profits, rents, interest).\n\n"
+            "3. **Production Approach**: Sum of value added at each stage of production.\n\n"
+            "#### Key Distinction:\n"
+            "- **Nominal GDP**: Measured at current prices (not adjusted for inflation).\n"
+            "- **Real GDP**: Adjusted for inflation using a base year → better for comparing across time periods.\n"
+            "- **GDP per capita**: $\\text{GDP} / \\text{Population}$ — measures average economic output per person."
+        )
+
+    if any(k in p_lower for k in ["inflation", "consumer price index", "cpi"]):
+        return (
+            "### Inflation & the Consumer Price Index\n\n"
+            "**Inflation** is the sustained increase in the general price level of goods and services over time, eroding purchasing power.\n\n"
+            "#### Types of Inflation:\n"
+            "- **Demand-Pull**: Too much money chasing too few goods (excess aggregate demand).\n"
+            "- **Cost-Push**: Rising production costs (wages, raw materials) push prices up.\n"
+            "- **Built-In**: Wage-price spiral — workers expect inflation, demand higher wages, which raises costs.\n\n"
+            "#### Consumer Price Index (CPI):\n"
+            "$$\\text{CPI} = \\frac{\\text{Cost of basket in current year}}{\\text{Cost of basket in base year}} \\times 100$$\n\n"
+            "$$\\text{Inflation Rate} = \\frac{\\text{CPI}_{\\text{current}} - \\text{CPI}_{\\text{previous}}}{\\text{CPI}_{\\text{previous}}} \\times 100\\%$$"
+        )
+
+    return None
+
+
+def _handle_history_query(prompt: str, p_lower: str) -> Optional[str]:
+    """Handle history and social studies domain questions."""
+    if any(k in p_lower for k in ["world war 1", "world war i", "ww1", "wwi", "first world war"]):
+        return (
+            "### World War I (1914–1918)\n\n"
+            "Also known as the *Great War*, WWI was a global conflict centered in Europe that fundamentally reshaped political borders and international relations.\n\n"
+            "#### Key Causes (M.A.I.N. Framework):\n"
+            "1. **M**ilitarism — Arms race, especially naval buildup between Britain and Germany\n"
+            "2. **A**lliances — Triple Entente (UK, France, Russia) vs. Triple Alliance (Germany, Austria-Hungary, Italy)\n"
+            "3. **I**mperialism — Colonial rivalries and competition for overseas territories\n"
+            "4. **N**ationalism — Ethnic tensions, especially in the Balkans (\"Powder Keg of Europe\")\n\n"
+            "#### Immediate Trigger:\n"
+            "The assassination of Archduke Franz Ferdinand of Austria-Hungary in Sarajevo on **June 28, 1914**.\n\n"
+            "#### Key Outcomes:\n"
+            "- ~20 million dead, ~21 million wounded\n"
+            "- Treaty of Versailles (1919) imposed harsh reparations on Germany\n"
+            "- Collapse of four empires: Ottoman, Austro-Hungarian, Russian, German\n"
+            "- Formation of the League of Nations"
+        )
+
+    if any(k in p_lower for k in ["world war 2", "world war ii", "ww2", "wwii", "second world war"]):
+        return (
+            "### World War II (1939–1945)\n\n"
+            "The deadliest conflict in human history, involving over 30 countries and resulting in 70–85 million fatalities.\n\n"
+            "#### Key Causes:\n"
+            "- Rise of fascism and totalitarian regimes (Nazi Germany, Imperial Japan, Fascist Italy)\n"
+            "- Failure of appeasement (Munich Agreement, 1938)\n"
+            "- German invasion of Poland on **September 1, 1939**\n\n"
+            "#### Major Turning Points:\n"
+            "1. **Battle of Stalingrad** (1942–43) — Soviet victory halted German eastern advance\n"
+            "2. **D-Day / Normandy Landings** (June 6, 1944) — Allied invasion of occupied France\n"
+            "3. **Midway** (June 1942) — US naval victory shifted Pacific theater\n\n"
+            "#### Aftermath:\n"
+            "- Formation of the United Nations (1945)\n"
+            "- Nuremberg Trials for war crimes\n"
+            "- Beginning of the Cold War\n"
+            "- Decolonization movements across Africa and Asia"
+        )
+
+    if any(k in p_lower for k in ["industrial revolution", "industrialization", "industrialisation"]):
+        return (
+            "### The Industrial Revolution (c. 1760–1840)\n\n"
+            "A transformative period marking the transition from agrarian, handcraft economies to machine-based industrial manufacturing.\n\n"
+            "#### Origins:\n"
+            "- Began in **Great Britain** due to coal/iron reserves, stable government, and colonial markets.\n\n"
+            "#### Key Innovations:\n"
+            "| Innovation | Inventor | Impact |\n"
+            "| :--- | :--- | :--- |\n"
+            "| Spinning Jenny | James Hargreaves (1764) | Multiplied yarn production by 8x |\n"
+            "| Steam Engine | James Watt (1769) | Powered factories, mines, and railways |\n"
+            "| Power Loom | Edmund Cartwright (1785) | Mechanized weaving, reduced labor cost |\n\n"
+            "#### Social Consequences:\n"
+            "- Rapid urbanization and factory system\n"
+            "- Rise of the working class and labor movements\n"
+            "- Child labor, poor sanitation, and wealth inequality\n"
+            "- Eventually led to regulations, unions, and welfare reforms"
+        )
+
+    return None
+
+
+def _handle_data_structures_query(prompt: str, p_lower: str) -> Optional[str]:
+    """Handle data structures and algorithms domain questions."""
+    if any(k in p_lower for k in ["linked list", "linkedlist"]):
+        return (
+            "### Linked List Data Structure\n\n"
+            "A linked list is a linear data structure where elements are stored in nodes, each containing data and a reference (pointer) to the next node.\n\n"
+            "```python\n"
+            "class Node:\n"
+            "    def __init__(self, data):\n"
+            "        self.data = data\n"
+            "        self.next = None\n\n"
+            "class LinkedList:\n"
+            "    def __init__(self):\n"
+            "        self.head = None\n\n"
+            "    def append(self, data):\n"
+            "        new_node = Node(data)\n"
+            "        if not self.head:\n"
+            "            self.head = new_node\n"
+            "            return\n"
+            "        current = self.head\n"
+            "        while current.next:\n"
+            "            current = current.next\n"
+            "        current.next = new_node\n\n"
+            "    def display(self):\n"
+            "        current = self.head\n"
+            "        while current:\n"
+            "            print(current.data, end=' -> ')\n"
+            "            current = current.next\n"
+            "        print('None')\n"
+            "```\n\n"
+            "#### Complexity Comparison (vs. Array):\n"
+            "| Operation | Linked List | Array |\n"
+            "| :--- | :--- | :--- |\n"
+            "| Access by index | $O(n)$ | $O(1)$ |\n"
+            "| Insert at head | $O(1)$ | $O(n)$ |\n"
+            "| Insert at tail | $O(n)$ / $O(1)$ with tail ptr | $O(1)$ amortized |\n"
+            "| Search | $O(n)$ | $O(n)$ / $O(\\log n)$ if sorted |"
+        )
+
+    if any(k in p_lower for k in ["stack", "lifo"]):
+        return (
+            "### Stack Data Structure (LIFO)\n\n"
+            "A **stack** is an abstract data type following **Last-In, First-Out** ordering. The last element added is the first to be removed.\n\n"
+            "```python\n"
+            "class Stack:\n"
+            "    def __init__(self):\n"
+            "        self._items = []\n\n"
+            "    def push(self, item):\n"
+            "        self._items.append(item)\n\n"
+            "    def pop(self):\n"
+            "        if self.is_empty():\n"
+            "            raise IndexError('Pop from empty stack')\n"
+            "        return self._items.pop()\n\n"
+            "    def peek(self):\n"
+            "        if self.is_empty():\n"
+            "            raise IndexError('Peek from empty stack')\n"
+            "        return self._items[-1]\n\n"
+            "    def is_empty(self) -> bool:\n"
+            "        return len(self._items) == 0\n\n"
+            "    def __len__(self) -> int:\n"
+            "        return len(self._items)\n"
+            "```\n\n"
+            "#### Real-World Applications:\n"
+            "- **Call Stack** — function call management in programming languages\n"
+            "- **Undo/Redo** — text editors use a stack for action history\n"
+            "- **Expression evaluation** — parsing parentheses and postfix notation\n"
+            "- **Browser history** — back button navigates a stack of visited pages"
+        )
+
+    if any(k in p_lower for k in ["hash table", "hashtable", "hash map", "hashmap", "dictionary data structure"]):
+        return (
+            "### Hash Table (Hash Map)\n\n"
+            "A hash table is a data structure that maps **keys** to **values** using a **hash function** for near-constant-time lookups.\n\n"
+            "#### How It Works:\n"
+            "1. A **hash function** converts the key to an integer index\n"
+            "2. The value is stored at that index in an underlying array\n"
+            "3. **Collisions** (two keys mapping to the same index) are handled via chaining or open addressing\n\n"
+            "```python\n"
+            "# Python's built-in dict is a highly optimized hash table\n"
+            "student_grades = {\n"
+            "    'Alice': 95,\n"
+            "    'Bob': 87,\n"
+            "    'Charlie': 92,\n"
+            "}\n\n"
+            "# O(1) average lookup\n"
+            "print(student_grades['Alice'])  # 95\n\n"
+            "# O(1) average insertion\n"
+            "student_grades['Diana'] = 91\n"
+            "```\n\n"
+            "#### Complexity:\n"
+            "| Operation | Average | Worst Case |\n"
+            "| :--- | :--- | :--- |\n"
+            "| Search | $O(1)$ | $O(n)$ |\n"
+            "| Insert | $O(1)$ | $O(n)$ |\n"
+            "| Delete | $O(1)$ | $O(n)$ |\n\n"
+            "Worst case occurs when all keys hash to the same index (degenerate case)."
+        )
+
+    return None
 
 def _generate_nigeria_ghana_analysis() -> str:
     return (
@@ -575,14 +825,28 @@ def _generate_study_plan(subject: str, level: str) -> str:
 
 
 def _generate_socratic_response(prompt: str) -> str:
-    clean_topic = prompt.replace("explain", "").replace("what is", "").replace("tell me about", "").strip()
+    """Generate a Socratic-method response with improved topic extraction."""
+    # Extract meaningful topic from the prompt using progressive stripping
+    clean_topic = prompt.strip()
+    # Remove common preambles
+    for preamble in ["explain", "what is", "what are", "tell me about", "describe",
+                     "how does", "how do", "why is", "why does", "why do",
+                     "can you explain", "help me understand", "teach me about",
+                     "i want to learn about", "i need help with"]:
+        pattern = re.compile(r"^" + re.escape(preamble) + r"\s*", re.IGNORECASE)
+        clean_topic = pattern.sub("", clean_topic)
+    # Remove trailing punctuation
+    clean_topic = re.sub(r"[?.!]+$", "", clean_topic).strip()
+    if not clean_topic:
+        clean_topic = "this concept"
     return (
         f"### Socratic Exploration: {clean_topic.title()}\n\n"
-        f"To understand **{clean_topic}**, let's build the intuition together step by step:\n\n"
-        f"1. **Foundational Observation**: When you think about this concept in everyday life, what basic inputs or conditions must exist before anything happens?\n"
-        f"2. **Mechanism Question**: If you were to alter one variable—such as increasing the intensity, mass, or data input—what would you expect the natural consequence to be?\n"
-        f"3. **Your Turn**: What do you hypothesize is the primary difference between a system operating under this principle versus one without it?\n\n"
-        f"Take a moment to formulate your answer, and tell me what you think!"
+        f"Let's build genuine understanding of **{clean_topic}** through guided inquiry:\n\n"
+        f"1. **Starting Point**: Before we dive into definitions, what do you already know or believe about {clean_topic}? Even an intuition or everyday experience counts.\n\n"
+        f"2. **Mechanism Question**: If you were to change one key variable or condition related to {clean_topic} — say, doubling an input, removing a constraint, or applying it in a new context — what would you predict happens and why?\n\n"
+        f"3. **Contrast Challenge**: What is the fundamental difference between a system that uses {clean_topic} and one that does not? What breaks or changes?\n\n"
+        f"4. **Your Hypothesis**: Based on what you've considered above, try to formulate a one-sentence definition of {clean_topic} in your own words.\n\n"
+        f"Take your time — reasoning through these questions is more valuable than memorizing a textbook definition! 💭"
     )
 
 

@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ORYQEN — General AI & AI Tutor Platform</title>
   <meta name="description" content="ORYQEN is an advanced dual-purpose AI assistant and educational intelligence platform. Operates both offline and online.">
-  <meta name="theme-color" content="#07090e">
+  <meta name="theme-color" content="#171717">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23171717'/%3E%3Ccircle cx='16' cy='16' r='10' stroke='%23f5f5f5' stroke-width='2' fill='none'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23f5f5f5'/%3E%3C/svg%3E">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.json">
   
@@ -20,6 +21,7 @@
   <!-- KaTeX for Beautiful Scientific and Mathematical Formula Rendering -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
   <div class="app-layout" id="appLayout">
@@ -165,6 +167,16 @@
             <span>Settings</span>
           </button>
 
+          <button class="sub-link-btn" id="sidebarInstallAppBtn" title="Install ORYQEN App on this Device">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Install App</span>
+            <span class="pill-indicator">PWA</span>
+          </button>
+
         </div>
 
         <!-- User Profile Quick Bar -->
@@ -228,12 +240,21 @@
             <span class="status-label" id="headerStatusLabel">Offline</span>
           </button>
 
-          <!-- New Chat Quick Action -->
-          <button class="icon-btn header-action-btn" id="headerNewChatBtn" title="New Session">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
+          <!-- Theme Toggle Quick Action -->
+          <button type="button" class="icon-btn header-action-btn" id="headerThemeToggleBtn" title="Toggle Light / Dark Mode" aria-label="Toggle Theme">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" id="headerThemeIcon">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
             </svg>
+          </button>
+
+          <!-- PWA Install App Action (Cross-platform install prompt for mobile/desktop) -->
+          <button type="button" class="header-install-btn hidden" id="headerInstallAppBtn" title="Install ORYQEN on your Device">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Install App</span>
           </button>
 
           <!-- User Account / Profile Trigger -->
@@ -414,7 +435,29 @@
           </div>
 
         </div>
+
+        <!-- Typing Indicator -->
+        <div class="typing-indicator hidden" id="typingIndicator">
+          <div class="typing-avatar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="9"></circle>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </div>
+          <div class="typing-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
       </div>
+
+      <!-- Scroll to Bottom FAB -->
+      <button type="button" class="scroll-to-bottom-fab hidden" id="scrollToBottomFab" title="Scroll to bottom">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
 
       <!-- Chat Input Bar -->
       <div class="chat-input-wrapper">
@@ -472,26 +515,6 @@
               </svg>
             </button>
 
-            <!-- Voice Recording Trigger -->
-            <button type="button" class="input-action-btn mic-btn" id="micBtn" title="Record Voice Question">
-              <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" id="micIcon">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="23"></line>
-                <line x1="8" y1="23" x2="16" y2="23"></line>
-              </svg>
-            </button>
-
-            <!-- Mobile LAN Audio Note Uploader (works over HTTP & LAN) -->
-            <input type="file" id="voiceFileInput" accept="audio/*" capture="microphone" class="file-input-hidden" style="display: none;">
-            <button type="button" class="input-action-btn" id="uploadVoiceBtn" title="Upload or Record Voice Note on Phone">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 18V5l12-2v13"></path>
-                <circle cx="6" cy="18" r="3"></circle>
-                <circle cx="18" cy="16" r="3"></circle>
-              </svg>
-            </button>
-
             <!-- Deep Web Research Toggle (Online mode) -->
             <button type="button" class="input-action-btn research-toggle-btn" id="researchToggleBtn" title="Toggle Deep Web Research">
               <svg class="anim-orbit" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
@@ -507,6 +530,16 @@
               aria-label="Ask ORYQEN"
             ></textarea>
 
+            <!-- Voice Recording Trigger (Right-hand side) -->
+            <button type="button" class="input-action-btn mic-btn" id="micBtn" title="Record Voice Question">
+              <svg class="anim-pulse-subtle" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" id="micIcon">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+
             <!-- Send / Stop Button -->
             <button type="submit" class="submit-btn" id="sendBtn" aria-label="Send message">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" id="sendIcon">
@@ -518,7 +551,17 @@
         </form>
 
         <div class="input-footnote">
-          <span id="footerModeText">Offline mode — AI runs locally on your device. Developed by MattieTech.</span>
+          <span id="footerModeText">Offline mode — AI runs locally on your device. Developed by SyntaxNexus Developer.</span>
+          <div class="input-footnote-actions">
+            <span class="char-counter" id="charCounter" title="Character count">0 / 10,000</span>
+            <button type="button" class="shortcuts-hint-btn" id="shortcutsBtn" title="Keyboard Shortcuts (Ctrl+/)">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                <path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M8 12h.001M12 12h.001M16 12h.001M7 16h10"></path>
+              </svg>
+              <span>Shortcuts</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1134,19 +1177,15 @@
               <div class="theme-picker-grid">
                 <button type="button" class="theme-card active" data-theme="dark">
                   <span class="theme-preview dark-preview"></span>
-                  <span class="theme-name">ORYQEN Dark</span>
-                </button>
-                <button type="button" class="theme-card" data-theme="midnight">
-                  <span class="theme-preview midnight-preview"></span>
-                  <span class="theme-name">Midnight Indigo</span>
-                </button>
-                <button type="button" class="theme-card" data-theme="emerald">
-                  <span class="theme-preview emerald-preview"></span>
-                  <span class="theme-name">Cyber Emerald</span>
+                  <span class="theme-name">OLED Black (Monochrome)</span>
                 </button>
                 <button type="button" class="theme-card" data-theme="light">
                   <span class="theme-preview light-preview"></span>
                   <span class="theme-name">Clean Scholar (Light)</span>
+                </button>
+                <button type="button" class="theme-card" data-theme="titanium">
+                  <span class="theme-preview titanium-preview"></span>
+                  <span class="theme-name">Titanium Minimal (Gray)</span>
                 </button>
               </div>
             </div>
@@ -1250,6 +1289,114 @@
 
           <!-- Tab 5: AI & Models (Model Manager) -->
           <div class="settings-tab-pane" id="pane-models">
+            <!-- Hardware Capability & Recommendation Card -->
+            <div class="settings-section">
+              <div class="hardware-advisor-card" id="hardwareAdvisorCard">
+                <div class="hardware-advisor-header">
+                  <div class="hw-icon-wrap">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                      <rect x="9" y="9" width="6" height="6"></rect>
+                      <line x1="9" y1="1" x2="9" y2="4"></line>
+                      <line x1="15" y1="1" x2="15" y2="4"></line>
+                      <line x1="9" y1="20" x2="9" y2="23"></line>
+                      <line x1="15" y1="20" x2="15" y2="23"></line>
+                      <line x1="20" y1="9" x2="23" y2="9"></line>
+                      <line x1="20" y1="14" x2="23" y2="14"></line>
+                      <line x1="1" y1="9" x2="4" y2="9"></line>
+                      <line x1="1" y1="14" x2="4" y2="14"></line>
+                    </svg>
+                  </div>
+                  <div class="hw-info-group">
+                    <span class="hw-title">Device Hardware Diagnostics & Model Advisor</span>
+                    <span class="hw-subtitle" id="hardwareStatsText">Analyzing Device RAM, Cores & Storage...</span>
+                  </div>
+                  <span class="hw-badge-recommended" id="hardwareRecBadge">Recommended: ORYQEN Local Core</span>
+                </div>
+                <div class="hw-metrics-row">
+                  <div class="hw-metric-chip">
+                    <span class="metric-label">Detected RAM</span>
+                    <span class="metric-val" id="hwMetricRam">-- GB</span>
+                  </div>
+                  <div class="hw-metric-chip">
+                    <span class="metric-label">CPU Cores</span>
+                    <span class="metric-val" id="hwMetricCores">--</span>
+                  </div>
+                  <div class="hw-metric-chip">
+                    <span class="metric-label">Storage Free</span>
+                    <span class="metric-val" id="hwMetricStorage">-- GB</span>
+                  </div>
+                  <div class="hw-metric-chip">
+                    <span class="metric-label">Platform</span>
+                    <span class="metric-val" id="hwMetricTier">Mobile / Desktop</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Select Preferred Active Model -->
+            <div class="settings-section">
+              <div class="section-title-row">
+                <div class="settings-section-title">Select Preferred Model Tier</div>
+                <span class="badge badge-accent" id="preferredModelBadge">Active: ORYQEN Local Core</span>
+              </div>
+              <p class="settings-help">The system automatically recommends the optimal model for your phone or laptop hardware. You can select your preferred tier below:</p>
+              
+              <div class="model-tier-grid" id="modelTierGrid">
+                <!-- Tier 1: Nano (0.5B) -->
+                <div class="model-tier-card" data-tier="nano">
+                  <div class="tier-card-top">
+                    <span class="tier-name">ORYQEN Nano</span>
+                    <span class="tier-badge">Ultra-Light (0.5B)</span>
+                  </div>
+                  <p class="tier-desc">Engineered for low-spec phones & tablets (&le; 4GB RAM). Instant execution, ultra-low memory.</p>
+                  <div class="tier-footer">
+                    <span class="tier-ram-tag">&le; 4GB RAM</span>
+                    <button type="button" class="btn btn-sm btn-secondary select-tier-btn" data-model="nano">Select</button>
+                  </div>
+                </div>
+
+                <!-- Tier 2: Core (1.5B) -->
+                <div class="model-tier-card active" data-tier="core">
+                  <div class="tier-card-top">
+                    <span class="tier-name">ORYQEN Local Core</span>
+                    <span class="tier-badge active">Balanced (1.5B)</span>
+                  </div>
+                  <p class="tier-desc">Balanced academic reasoning, step-by-step math, and conceptual explanations. 100% offline.</p>
+                  <div class="tier-footer">
+                    <span class="tier-ram-tag">4GB–8GB RAM</span>
+                    <button type="button" class="btn btn-sm btn-primary select-tier-btn" data-model="core">Active</button>
+                  </div>
+                </div>
+
+                <!-- Tier 3: Pro (7B) -->
+                <div class="model-tier-card" data-tier="pro">
+                  <div class="tier-card-top">
+                    <span class="tier-name">ORYQEN Pro</span>
+                    <span class="tier-badge">Heavyweight (7B)</span>
+                  </div>
+                  <p class="tier-desc">Complex STEM problem solving, university-level calculus, and coding synthesis.</p>
+                  <div class="tier-footer">
+                    <span class="tier-ram-tag">8GB+ RAM</span>
+                    <button type="button" class="btn btn-sm btn-secondary select-tier-btn" data-model="pro">Select</button>
+                  </div>
+                </div>
+
+                <!-- Tier 4: Swift (Cloud) -->
+                <div class="model-tier-card" data-tier="swift">
+                  <div class="tier-card-top">
+                    <span class="tier-name">ORYQEN Swift (Cloud)</span>
+                    <span class="tier-badge online">Cloud Online</span>
+                  </div>
+                  <p class="tier-desc">Zero on-device memory footprint. Cloud intelligence with live web research capability.</p>
+                  <div class="tier-footer">
+                    <span class="tier-ram-tag">Any Device</span>
+                    <button type="button" class="btn btn-sm btn-secondary select-tier-btn" data-model="swift">Select</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="settings-section">
               <div class="settings-section-title">Active Inference Engines</div>
               <div class="model-status-summary-grid">
@@ -1573,6 +1720,58 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" id="dismissSupabaseModalBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: KEYBOARD SHORTCUTS ================= -->
+  <div class="modal-overlay hidden" id="shortcutsModal">
+    <div class="modal-container" style="max-width: 480px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>Keyboard Shortcuts</h3>
+          <p>Quick navigation and control shortcuts for power users.</p>
+        </div>
+        <button class="icon-btn close-modal-btn" id="closeShortcutsModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="shortcuts-list">
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Send message</span>
+            <div class="shortcut-keys"><kbd>Enter</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">New line in prompt</span>
+            <div class="shortcut-keys"><kbd>Shift</kbd> + <kbd>Enter</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">New conversation</span>
+            <div class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>K</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Toggle Offline / Online</span>
+            <div class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>M</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Toggle Sidebar</span>
+            <div class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>B</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Open Keyboard Shortcuts</span>
+            <div class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>/</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Focus message input</span>
+            <div class="shortcut-keys"><kbd>/</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-desc">Close modal / Cancel voice</span>
+            <div class="shortcut-keys"><kbd>Esc</kbd></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="dismissShortcutsBtn">Got It</button>
       </div>
     </div>
   </div>

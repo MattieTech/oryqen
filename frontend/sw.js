@@ -4,30 +4,31 @@
  * Provides complete offline shell resilience, asset caching, and offline status handling.
  */
 
-const CACHE_NAME = 'oryqen-static-v2';
+const CACHE_NAME = 'oryqen-static-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
   '/app.js',
   '/manifest.json',
-  'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css',
-  'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js',
-  'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js',
+  'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css',
+  'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js',
+  'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js',
 ];
 
 // Install: pre-cache critical UI shell
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS).catch((err) => {
         console.warn('PWA Pre-cache notice:', err);
       });
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
-// Activate: clean up outdated cache versions
+// Activate: clean up outdated cache versions immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -38,7 +39,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Cache-First for static assets, Network-First for API
+// Fetch: Network-First with offline cache fallback
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -69,13 +70,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets, use Cache-First falling back to network
+  // For static assets, use Network-First falling back to offline cache
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
+    fetch(event.request)
+      .then((networkResponse) => {
         if (
           networkResponse &&
           networkResponse.status === 200 &&
@@ -88,12 +86,17 @@ self.addEventListener('fetch', (event) => {
           });
         }
         return networkResponse;
-      }).catch(() => {
-        // If navigating to an HTML route offline, return cached index.html
-        if (event.request.headers.get('accept')?.includes('text/html')) {
-          return caches.match('/index.html');
-        }
-      });
-    })
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          if (event.request.headers.get('accept')?.includes('text/html')) {
+            return caches.match('/index.html');
+          }
+        });
+      })
   );
 });
+

@@ -15,6 +15,38 @@ from typing import Optional, Generator, List, Dict, Any
 
 import socket
 import httpx
+import logging
+
+logger = logging.getLogger("oryqen.llm")
+
+# Shared HTTP client for connection pooling (avoids creating new TCP connections per request)
+_http_client: Optional[httpx.Client] = None
+
+def _get_http_client(timeout: float = 35.0) -> httpx.Client:
+    """Get or create a shared httpx client with connection pooling."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.Client(
+            timeout=timeout,
+            limits=httpx.Limits(max_keepalive_connections=8, max_connections=16),
+            follow_redirects=True,
+        )
+    return _http_client
+
+
+def _retry_request(fn, max_retries: int = 2, base_delay: float = 0.5):
+    """Execute fn() with exponential backoff retry. Returns result or raises last exception."""
+    last_err = None
+    for attempt in range(max_retries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            last_err = e
+            if attempt < max_retries:
+                delay = base_delay * (2 ** attempt)
+                logger.warning(f"Retry {attempt+1}/{max_retries} after {delay}s: {e}")
+                time.sleep(delay)
+    raise last_err
 
 
 # Load .env if present
@@ -144,13 +176,9 @@ ORYQEN_MODEL_MAP = {
     "llama3.2:1b": "ORYQEN Local Core",
     "llama3.2:3b": "ORYQEN Local Core Pro",
     "phi3:mini": "ORYQEN Local Core",
-    # Cloud models
-    "gemini-3.6-flash": "ORYQEN Swift",
-    "gemini-3.7-flash": "ORYQEN Swift",
-    "gemini-3.8-flash": "ORYQEN Swift",
-    "gemini-3-flash-preview": "ORYQEN Swift",
-    "gemini-flash-latest": "ORYQEN Swift",
-    "gemini-pro-latest": "ORYQEN Reason",
+    # Cloud models — only real, existing model identifiers
+    "gemini-2.5-flash-preview-05-20": "ORYQEN Swift",
+    "gemini-2.5-flash-preview": "ORYQEN Swift",
     "gemini-2.5-flash": "ORYQEN Swift",
     "gemini-2.5-pro": "ORYQEN Reason",
     "gemini-2.0-flash": "ORYQEN Swift",
@@ -532,13 +560,11 @@ class LocalAIProvider(AIProvider):
 # =========================================================================
 
 # Prioritized real model list with automatic failover
+# NOTE: Only use models that actually exist in the Gemini API
 CLOUD_CANDIDATE_MODELS = [
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-flash-latest",
-    "gemini-3.5-flash",
-    "gemini-2.5-flash",
+    "gemini-2.5-flash-preview-05-20",
     "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
     "gemini-1.5-flash",
 ]
 
@@ -562,25 +588,30 @@ def call_openrouter_api(messages: list[dict], system: str = "", temperature: flo
         payload_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
 
     candidates = [model, "google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat"]
+    client = _get_http_client(timeout=35.0)
     for c in candidates:
         try:
-            with httpx.Client(timeout=35.0) as client:
-                res = client.post(
+            def _do_openrouter_call(m=c):
+                return client.post(
                     "https://openrouter.ai/api/v1/chat/completions",
                     headers=headers,
                     json={
-                        "model": c,
+                        "model": m,
                         "messages": payload_messages,
                         "temperature": temperature,
                         "max_tokens": 2048,
                     },
                 )
-                if res.status_code == 200:
-                    choices = res.json().get("choices", [])
-                    if choices:
-                        content = choices[0].get("message", {}).get("content", "").strip()
-                        if content:
-                            return content
+            t0 = time.time()
+            res = _retry_request(_do_openrouter_call, max_retries=1, base_delay=0.5)
+            elapsed = round(time.time() - t0, 2)
+            if res.status_code == 200:
+                choices = res.json().get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "").strip()
+                    if content:
+                        logger.info(f"[Provider:OpenRouter] model={c} latency={elapsed}s")
+                        return content
         except Exception:
             continue
     return None
@@ -773,14 +804,54 @@ class CloudAIProvider(AIProvider):
                 if openrouter_yielded:
                     return
 
-                # 2. Try Local Model streaming if available
+                # 2. Try Gemini API streaming (SSE)
+                if self.api_key and not self.api_key.startswith("test-"):
+                    headers = {"Content-Type": "application/json"}
+                    for model in CLOUD_CANDIDATE_MODELS:
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse&key={self.api_key}"
+                        try:
+                            gemini_yielded = False
+                            with httpx.Client(timeout=45.0) as client:
+                                with client.stream("POST", url, headers=headers, json=payload) as response:
+                                    if response.status_code != 200:
+                                        continue
+                                    for line in response.iter_lines():
+                                        if line.startswith("data: "):
+                                            data_str = line[6:].strip()
+                                            if not data_str:
+                                                continue
+                                            try:
+                                                chunk_json = json.loads(data_str)
+                                                candidates = chunk_json.get("candidates", [])
+                                                if candidates:
+                                                    parts = candidates[0].get("content", {}).get("parts", [])
+                                                    if parts:
+                                                        token = parts[0].get("text", "")
+                                                        if token:
+                                                            gemini_yielded = True
+                                                            yield {
+                                                                "content": token,
+                                                                "chunk": token,
+                                                                "token": token,
+                                                                "model": "oryqen-swift",
+                                                                "display_name": "ORYQEN Swift",
+                                                                "done": False,
+                                                            }
+                                            except Exception:
+                                                pass
+                            if gemini_yielded:
+                                return
+                        except Exception:
+                            continue
+
+                # 3. Try Local Model streaming if available
                 local_prov = LocalAIProvider()
                 if local_prov.is_available:
                     for token_data in local_prov.chat_stream(user_messages, system=system):
                         yield token_data
                     return
 
-                # 3. Honest error if all connections fail
+                # 4. Honest error if all connections fail
                 err_msg = (
                     "⚠️ **Connection Interrupted**\n\n"
                     "Unable to stream response from Cloud AI (OpenRouter/Gemini), and no local neural model is active.\n\n"
@@ -805,21 +876,26 @@ class CloudAIProvider(AIProvider):
         if openrouter_res:
             return create_response(openrouter_res, "ORYQEN Swift")
 
-        # 2. Try Gemini API
+        # 2. Try Gemini API with retry and connection pooling
         if self.api_key and not self.api_key.startswith("test-"):
             headers = {"Content-Type": "application/json"}
+            client = _get_http_client(timeout=25.0)
             for model in CLOUD_CANDIDATE_MODELS:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
                 try:
-                    with httpx.Client(timeout=25.0) as client:
-                        res = client.post(url, headers=headers, json=payload)
-                        if res.status_code == 200:
-                            data = res.json()
-                            candidates = data.get("candidates", [])
-                            if candidates:
-                                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                                if text:
-                                    return create_response(text, "ORYQEN Swift")
+                    def _do_gemini_call(u=url):
+                        return client.post(u, headers=headers, json=payload)
+                    t0 = time.time()
+                    res = _retry_request(_do_gemini_call, max_retries=2, base_delay=0.5)
+                    elapsed = round(time.time() - t0, 2)
+                    if res.status_code == 200:
+                        data = res.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                            if text:
+                                logger.info(f"[Provider:Gemini] model={model} latency={elapsed}s")
+                                return create_response(text, "ORYQEN Swift")
                 except Exception:
                     continue
 
