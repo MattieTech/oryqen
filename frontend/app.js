@@ -6,7 +6,21 @@
  */
 
 // Configuration
-const API_BASE = window.location.origin.includes(':8000') ? '' : 'http://localhost:8000';
+// When served by FastAPI (locally on port 8000, via local hotspot IP, or on Render/Cloud HTTPS),
+// API requests are relative to the current origin (API_BASE = '').
+// Only fallback to 'http://localhost:8000' if opening index.html via an external dev server (:5500, :3000, :5173) or file://
+const isDevFrontendOnly = window.location.protocol === 'file:' || 
+  window.location.port === '5500' || 
+  window.location.port === '3000' || 
+  window.location.port === '5173';
+
+const API_BASE = isDevFrontendOnly ? 'http://localhost:8000' : '';
+
+// Cloud deployment detection (Render, Railway, custom domains, etc.)
+const isCloudHosted = window.location.hostname.includes('render.com') || 
+  window.location.hostname.includes('railway.app') || 
+  window.location.hostname.includes('vercel.app') || 
+  (!['localhost', '127.0.0.1'].includes(window.location.hostname) && !window.location.hostname.startsWith('192.168.') && !window.location.hostname.startsWith('10.'));
 
 // Global State
 const state = {
@@ -16,7 +30,7 @@ const state = {
   tutorMode: 'learn',   // 'learn' | 'practice' | 'quiz' | 'exam' | 'flashcard' | 'explain' | 'socratic' | 'mistake_analysis' | 'study_plan' | 'revision'
   tutorLevel: 'intermediate',
   subject: 'General Science',
-  mode: 'offline',      // 'offline' | 'online'
+  mode: isCloudHosted ? 'online' : (localStorage.getItem('oryqen_mode') || 'offline'),
   deepResearch: false,
   attachedDoc: null,
   isGenerating: false,
@@ -83,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupScrollToBottomFab();
 
   // Load initial data
+  setAiMode(state.mode, false);
   loadCurrentUser();
   loadConversations();
   loadDocumentsList();
@@ -366,13 +381,16 @@ function updateBottomNav(tab) {
   });
 }
 
-function setAiMode(mode) {
+function setAiMode(mode, showNotification = true) {
   state.mode = mode;
+  localStorage.setItem('oryqen_mode', mode);
   document.getElementById('segModeOffline')?.classList.toggle('active', mode === 'offline');
   document.getElementById('segModeOnline')?.classList.toggle('active', mode === 'online');
 
   updateHonestStatus();
-  showToast(mode === 'online' ? 'Switched to Online Cloud AI' : 'Switched to Offline Mode');
+  if (showNotification) {
+    showToast(mode === 'online' ? 'Switched to Online Cloud AI (ORYQEN Swift)' : 'Switched to Offline Mode (ORYQEN Local Core)');
+  }
 }
 
 async function updateHonestStatus() {
@@ -1298,7 +1316,15 @@ async function submitUserMessage(overrideQuery) {
       }
 
       removeElement(thinkingId);
-      state.messages.push({ role: 'assistant', content: fullContent, model: modelUsed });
+      if (!fullContent) {
+        appendMessageRow({
+          role: 'assistant',
+          content: '⚠️ **Inference Stream Notice**\n\nNo tokens received from the selected model engine. If testing on Render/Cloud, switch to **Online Mode** in the header or sidebar and verify `GEMINI_API_KEY` is configured.',
+          model: 'ORYQEN Notice',
+        });
+      } else {
+        state.messages.push({ role: 'assistant', content: fullContent, model: modelUsed });
+      }
     } else {
       // Synchronous fallback
       const fallbackRes = await fetch(`${API_BASE}/api/chat`, {
@@ -1306,7 +1332,7 @@ async function submitUserMessage(overrideQuery) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await fallbackRes.json();
+      const data = await fallbackRes.json().catch(() => ({}));
       removeElement(thinkingId);
       if (data.conversation_id && !state.currentConversationId) {
         state.currentConversationId = data.conversation_id;
@@ -1314,13 +1340,23 @@ async function submitUserMessage(overrideQuery) {
         document.getElementById('currentChatTitle').textContent = query.slice(0, 32);
         loadConversations();
       }
-      appendMessageRow({
-        role: 'assistant',
-        content: data.answer || 'Response completed.',
-        citations: data.sources || [],
-        model: data.display_name || data.model || 'ORYQEN',
-      });
-      state.messages.push({ role: 'assistant', content: data.answer });
+
+      if (!fallbackRes.ok || !data.answer) {
+        const errorText = data.detail || data.error || (data.message || 'The server returned an empty or invalid response.');
+        appendMessageRow({
+          role: 'assistant',
+          content: `⚠️ **Inference Notice**\n\n${typeof errorText === 'object' ? JSON.stringify(errorText) : errorText}\n\n*If using Render/Cloud, switch to **Online Mode** (top right) and verify \`GEMINI_API_KEY\` is configured in your Render dashboard environment variables.*`,
+          model: 'ORYQEN Notice',
+        });
+      } else {
+        appendMessageRow({
+          role: 'assistant',
+          content: data.answer,
+          citations: data.sources || [],
+          model: data.display_name || data.model || 'ORYQEN',
+        });
+        state.messages.push({ role: 'assistant', content: data.answer });
+      }
       scrollToBottom();
     }
   } catch (err) {

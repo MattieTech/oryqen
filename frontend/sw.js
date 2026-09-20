@@ -4,7 +4,7 @@
  * Provides complete offline shell resilience, asset caching, and offline status handling.
  */
 
-const CACHE_NAME = 'oryqen-static-v6';
+const CACHE_NAME = 'oryqen-static-v7';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -43,12 +43,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // If API request, attempt Network-First with offline fallback
+  // If API request: pass through directly to network, only providing offline fallback for status
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        // Return structured offline fallback for health or status requests
-        if (url.pathname === '/api/health' || url.pathname === '/api/models/status') {
+    if (url.pathname === '/api/health' || url.pathname === '/api/models/status') {
+      event.respondWith(
+        fetch(event.request).catch(() => {
           return new Response(
             JSON.stringify({
               status: 'offline',
@@ -60,13 +59,10 @@ self.addEventListener('fetch', (event) => {
             }),
             { headers: { 'Content-Type': 'application/json' } }
           );
-        }
-        return new Response(
-          JSON.stringify({ error: 'Network request failed in offline mode' }),
-          { status: 503, headers: { 'Content-Type': 'application/json' } }
-        );
-      })
-    );
+        })
+      );
+    }
+    // All other API endpoints bypass service worker so SSE and errors flow naturally
     return;
   }
 
