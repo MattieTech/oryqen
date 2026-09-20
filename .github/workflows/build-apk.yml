@@ -9,6 +9,7 @@ on:
       - 'android/**'
       - 'capacitor.config.json'
       - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
@@ -35,8 +36,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
 
       - name: Install Node Dependencies
         run: npm install
@@ -50,7 +51,7 @@ jobs:
       - name: Build Android APK with Gradle
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace
           cd ..
 
       - name: Prepare APK Artifact
