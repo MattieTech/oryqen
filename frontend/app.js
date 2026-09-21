@@ -268,18 +268,29 @@ function setupNavigation() {
     showToast(next === 'dark' ? 'OLED Monochrome Dark Theme' : 'Clean Scholar Light Theme');
   });
 
-  // PWA Install App Prompt
+  // PWA & Native Standalone Detection
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
+    || window.navigator.standalone === true 
+    || !!window.Capacitor?.isNativePlatform?.()
+    || document.referrer.includes('android-app://');
+
+  if (isStandalone) {
+    document.getElementById('headerInstallAppBtn')?.classList.add('hidden');
+    document.getElementById('sidebarInstallAppBtn')?.classList.add('hidden');
+  }
+
   let deferredInstallPrompt = null;
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredInstallPrompt = e;
     const installBtn = document.getElementById('headerInstallAppBtn');
-    if (installBtn) installBtn.classList.remove('hidden');
+    if (installBtn && !isStandalone) installBtn.classList.remove('hidden');
   });
 
   window.addEventListener('appinstalled', () => {
     showToast('ORYQEN App installed on your device!');
     document.getElementById('headerInstallAppBtn')?.classList.add('hidden');
+    document.getElementById('sidebarInstallAppBtn')?.classList.add('hidden');
     deferredInstallPrompt = null;
   });
 
@@ -411,7 +422,8 @@ async function updateHonestStatus() {
       const localModels = (Array.isArray(data.local_models_available) && data.local_models_available.length > 0)
         ? data.local_models_available
         : (data.local_model_available ? [data.active_local_model || 'Local Model'] : (isOllamaActive ? ['qwen2.5:0.5b'] : []));
-      const hasLocalModel = data.local_model_available || isOllamaActive;
+      const hasOnDeviceModel = Boolean(window.OfflineEngine?.getInstalledModelInfo?.());
+      const hasLocalModel = data.local_model_available || isOllamaActive || hasOnDeviceModel;
 
       // Update Local Core status indicators in settings card if available
       const localBadge = document.getElementById('localDaemonBadge');
@@ -420,9 +432,9 @@ async function updateHonestStatus() {
       if (hasLocalModel) {
         if (localBadge) {
           localBadge.className = 'engine-badge offline';
-          localBadge.textContent = 'Active (Offline Neural)';
+          localBadge.textContent = hasOnDeviceModel ? 'Active (On-Device Neural)' : 'Active (Offline Neural)';
         }
-        if (localTitle) localTitle.textContent = 'ORYQEN Local Core (Neural Engine)';
+        if (localTitle) localTitle.textContent = hasOnDeviceModel ? 'ORYQEN On-Device Core' : 'ORYQEN Local Core (Neural Engine)';
         if (localDesc) localDesc.textContent = '100% on-device neural weights. Operates with zero internet connectivity.';
       } else {
         if (localBadge) {
@@ -1255,53 +1267,56 @@ async function submitUserMessage(overrideQuery) {
   // Standalone on-device mobile AI execution branch
   if (state.mode === 'offline' && window.OfflineEngine) {
     const installed = window.OfflineEngine.getInstalledModelInfo();
-    let backendReachable = false;
-    try {
-      const probe = await fetch(`${API_BASE}/api/health`, { method: 'GET', signal: AbortSignal.timeout(1200) });
-      backendReachable = probe.ok;
-    } catch (e) {
-      backendReachable = false;
-    }
+    if (installed) {
+      removeElement(thinkingId);
+      const assistantBubble = createStreamingAssistantRow(installed.displayName || 'ORYQEN On-Device Core');
+      let fullContent = '';
 
-    if (!backendReachable) {
-      if (installed) {
-        removeElement(thinkingId);
-        const assistantBubble = createStreamingAssistantRow(installed.displayName || 'ORYQEN On-Device Core');
-        let fullContent = '';
-
-        try {
-          for await (const chunk of window.OfflineEngine.streamInference(query, '', () => {})) {
-            if (state.abortController?.signal?.aborted) break;
-            fullContent += chunk.token;
-            updateStreamingAssistantRow(assistantBubble, fullContent);
-            scrollToBottom();
-          }
-          state.messages.push({ role: 'assistant', content: fullContent, model: 'oryqen-device-core' });
-        } catch (infErr) {
-          appendMessageRow({ role: 'assistant', content: `⚠️ On-device inference notice: ${infErr.message}`, model: 'ORYQEN Error' });
-        } finally {
-          setGeneratingState(false);
-          showTypingIndicator(false);
-          state.abortController = null;
-          renderAllMath();
-          enhanceCodeBlocks();
+      try {
+        for await (const chunk of window.OfflineEngine.streamInference(query, '', () => {})) {
+          if (state.abortController?.signal?.aborted) break;
+          fullContent += chunk.token;
+          updateStreamingAssistantRow(assistantBubble, fullContent);
+          scrollToBottom();
         }
-        return;
-      } else {
-        removeElement(thinkingId);
-        appendMessageRow({
-          role: 'assistant',
-          content: '⚠️ **On-Device Offline Brain Required**\n\nYou are in Offline Mode with no local server detected. To chat offline directly on your phone with zero internet, download your on-device neural brain (~350 MB once over WiFi).\n\n<button type="button" class="btn btn-sm btn-primary" id="promptOpenOfflineBrainBtn" style="margin-top:8px;">Open Offline Brain Setup</button>',
-          model: 'ORYQEN Standby',
-        });
-        document.getElementById('promptOpenOfflineBrainBtn')?.addEventListener('click', () => {
-          document.getElementById('offlineBrainModal')?.classList.remove('hidden');
-        });
+        state.messages.push({ role: 'assistant', content: fullContent, model: 'oryqen-device-core' });
+      } catch (infErr) {
+        appendMessageRow({ role: 'assistant', content: `⚠️ On-device inference: ${infErr.message}`, model: 'ORYQEN Local' });
+      } finally {
         setGeneratingState(false);
         showTypingIndicator(false);
         state.abortController = null;
-        return;
+        renderAllMath();
+        enhanceCodeBlocks();
       }
+      return;
+    }
+
+    // If on-device model not installed yet, check if local daemon (e.g. Ollama) is running
+    let hasLocalBackend = false;
+    try {
+      const probe = await fetch(`${API_BASE}/api/health`, { method: 'GET', signal: AbortSignal.timeout(1200) });
+      if (probe.ok && state.modelsStatus?.local_model_available) {
+        hasLocalBackend = true;
+      }
+    } catch (e) {
+      hasLocalBackend = false;
+    }
+
+    if (!hasLocalBackend) {
+      removeElement(thinkingId);
+      appendMessageRow({
+        role: 'assistant',
+        content: 'To chat offline directly on your phone with zero internet, please download your on-device neural brain (~350 MB once over WiFi).\n\n<button type="button" class="btn btn-sm btn-primary" id="promptOpenOfflineBrainBtn" style="margin-top:8px;">Download Offline Brain</button>',
+        model: 'ORYQEN Standby',
+      });
+      document.getElementById('promptOpenOfflineBrainBtn')?.addEventListener('click', () => {
+        document.getElementById('offlineBrainModal')?.classList.remove('hidden');
+      });
+      setGeneratingState(false);
+      showTypingIndicator(false);
+      state.abortController = null;
+      return;
     }
   }
 
@@ -1371,11 +1386,33 @@ async function submitUserMessage(overrideQuery) {
 
       removeElement(thinkingId);
       if (!fullContent) {
-        appendMessageRow({
-          role: 'assistant',
-          content: '⚠️ **Inference Stream Notice**\n\nNo tokens received from the selected model engine. If testing on Render/Cloud, switch to **Online Mode** in the header or sidebar and verify `GEMINI_API_KEY` is configured.',
-          model: 'ORYQEN Notice',
-        });
+        // Silent failover to on-device engine if model weights are present
+        const installed = window.OfflineEngine?.getInstalledModelInfo?.();
+        if (installed) {
+          const assistantBubble = createStreamingAssistantRow(installed.displayName || 'ORYQEN On-Device Core');
+          let localContent = '';
+          try {
+            for await (const chunk of window.OfflineEngine.streamInference(query, '', () => {})) {
+              if (state.abortController?.signal?.aborted) break;
+              localContent += chunk.token;
+              updateStreamingAssistantRow(assistantBubble, localContent);
+              scrollToBottom();
+            }
+            state.messages.push({ role: 'assistant', content: localContent, model: 'oryqen-device-core' });
+          } catch (e) {
+            appendMessageRow({
+              role: 'assistant',
+              content: 'I am temporarily unable to connect to the cloud servers. Please check your internet connection, or use the Offline Brain in Settings.',
+              model: 'ORYQEN Standby',
+            });
+          }
+        } else {
+          appendMessageRow({
+            role: 'assistant',
+            content: 'I am temporarily unable to reach the neural servers. Please check your internet connection, or download the Offline Brain in Settings to chat with zero internet.',
+            model: 'ORYQEN Standby',
+          });
+        }
       } else {
         state.messages.push({ role: 'assistant', content: fullContent, model: modelUsed });
       }
@@ -1396,11 +1433,10 @@ async function submitUserMessage(overrideQuery) {
       }
 
       if (!fallbackRes.ok || !data.answer) {
-        const errorText = data.detail || data.error || (data.message || 'The server returned an empty or invalid response.');
         appendMessageRow({
           role: 'assistant',
-          content: `⚠️ **Inference Notice**\n\n${typeof errorText === 'object' ? JSON.stringify(errorText) : errorText}\n\n*If using Render/Cloud, switch to **Online Mode** (top right) and verify \`GEMINI_API_KEY\` is configured in your Render dashboard environment variables.*`,
-          model: 'ORYQEN Notice',
+          content: 'I am having trouble connecting to the network right now. Please verify your connection or switch to Offline Mode to chat on-device.',
+          model: 'ORYQEN Standby',
         });
       } else {
         appendMessageRow({
@@ -3639,6 +3675,9 @@ function setupOfflineBrainModal() {
 
   // Open buttons
   document.getElementById('sidebarOfflineBrainBtn')?.addEventListener('click', () => {
+    if (window.innerWidth <= 768 && typeof closeSidebar === 'function') {
+      closeSidebar();
+    }
     modal.classList.remove('hidden');
     refreshOfflineBrainUI();
   });
@@ -3686,8 +3725,12 @@ function setupOfflineBrainModal() {
         if (progressPct) progressPct.textContent = `${p.percent}%`;
         if (progressBar) progressBar.style.width = `${p.percent}%`;
         if (progressTitle) progressTitle.textContent = p.percent === 100 ? 'Download Complete!' : 'Downloading Neural Weights...';
-        if (progressTransferred) progressTransferred.textContent = `${p.transferredMb} MB / ${p.totalMb} MB`;
-        if (progressSpeed) progressSpeed.textContent = `Speed: ${p.speedMbps} MB/s`;
+        if (progressTransferred && p.transferredMb) {
+          progressTransferred.textContent = `${p.transferredMb} MB / ${p.totalMb || p.transferredMb} MB`;
+        }
+        if (progressSpeed && p.speedMbps) {
+          progressSpeed.textContent = p.speedMbps === 'Cached' ? 'Saved to local storage' : `Speed: ${p.speedMbps} MB/s`;
+        }
       });
 
       showToast('Offline Neural Brain installed successfully!');

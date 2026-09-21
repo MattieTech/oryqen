@@ -150,8 +150,15 @@
           sizeMb: (blob.size / (1024 * 1024)).toFixed(1),
         }));
 
+        const finalMb = (blob.size / (1024 * 1024)).toFixed(1);
         if (typeof onProgress === 'function') {
-          onProgress({ percent: 100, status: 'complete' });
+          onProgress({
+            percent: 100,
+            transferredMb: finalMb,
+            totalMb: finalMb,
+            speedMbps: 'Cached',
+            status: 'complete',
+          });
         }
         return true;
 

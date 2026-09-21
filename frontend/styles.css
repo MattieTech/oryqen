@@ -1729,8 +1729,9 @@ kbd {
   position: fixed;
   inset: 0;
   background-color: var(--bg-overlay);
-  backdrop-filter: blur(4px);
-  z-index: 100;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1050;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1741,8 +1742,9 @@ kbd {
   display: none !important;
 }
 
-.modal-container {
-  background-color: var(--bg-card);
+.modal-container,
+.offline-brain-modal-card {
+  background-color: var(--bg-card) !important;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
   width: 100%;
@@ -1750,11 +1752,20 @@ kbd {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   overflow: hidden;
+  position: relative;
+  z-index: 1060;
 }
 
-.modal-container.modal-large {
+.theme-dark .modal-container,
+.theme-dark .offline-brain-modal-card {
+  background-color: #12151c !important;
+  border-color: #272f3d;
+}
+
+.modal-container.modal-large,
+.offline-brain-modal-card.modal-large {
   max-width: 780px;
 }
 
