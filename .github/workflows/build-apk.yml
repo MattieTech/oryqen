@@ -48,16 +48,20 @@ jobs:
       - name: Grant Execute Permission for Gradle Wrapper
         run: chmod +x android/gradlew
 
-      - name: Build Android APK with Gradle
+      - name: Generate Release Signing Keystore
+        run: |
+          keytool -genkey -v -keystore android/app/release.keystore -alias oryqen -keyalg RSA -keysize 2048 -validity 10000 -storepass oryqen2026 -keypass oryqen2026 -dname "CN=ORYQEN, OU=Mobile, O=SyntaxNexus, L=Lagos, ST=Lagos, C=NG"
+
+      - name: Build Android Release APK with Gradle
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
           cd ..
 
       - name: Prepare APK Artifact
         run: |
           mkdir -p build-output
-          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/oryqen-v2.0-offline.apk
+          cp android/app/build/outputs/apk/release/app-release.apk build-output/oryqen-v2.0-offline.apk
 
       - name: Upload APK to Job Artifacts
         uses: actions/upload-artifact@v4
