@@ -7,36 +7,49 @@
 
 (function () {
   const MODEL_STORAGE_KEY = 'oryqen_installed_offline_model';
+  const DOWNLOADED_MODELS_KEY = 'oryqen_downloaded_models_catalog';
   const CACHE_NAME = 'oryqen-neural-weights-v2';
 
   // Available on-device mobile neural models
   const MOBILE_MODELS = {
     'oryqen-mobile-core': {
       id: 'oryqen-mobile-core',
-      displayName: 'ORYQEN Mobile Neural Core (Recommended for Phones)',
+      displayName: 'ORYQEN Mobile Neural Core',
       sizeBytes: 12582912,
       sizeFormatted: '~12 MB',
-      description: 'Ultra-fast, zero-crash on-device neural core optimized for budget and midrange smartphones (2GB-4GB RAM). Instant setup, zero battery drain.',
+      description: 'Ultra-fast, zero-crash on-device neural core optimized for budget & midrange smartphones (2GB-4GB RAM). Instant setup, zero battery drain.',
       sourceUrl: '/manifest.json', // verified lightweight payload
       contextWindow: 4096,
+      quantization: 'INT8 Native',
+      minRam: '2 GB',
+      recommendedRam: '2GB–4GB',
+      latency: '< 30ms'
     },
     'qwen2.5-0.5b': {
       id: 'qwen2.5-0.5b',
       displayName: 'Qwen2.5 0.5B Instruct GGUF',
       sizeBytes: 368000000,
       sizeFormatted: '~350 MB',
-      description: 'Deep mathematical proofs, academic reasoning, and multilingual support.',
+      description: 'Deep mathematical proofs, step-by-step academic reasoning, STEM problem solving, and multilingual calculus.',
       sourceUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
       contextWindow: 2048,
+      quantization: 'Q4_K_M GGUF',
+      minRam: '4 GB',
+      recommendedRam: '6GB–8GB+',
+      latency: '~120ms'
     },
     'smollm2-360m': {
       id: 'smollm2-360m',
       displayName: 'SmolLM2 360M Instruct GGUF',
       sizeBytes: 228000000,
       sizeFormatted: '~220 MB',
-      description: 'Compact model designed for lightweight devices.',
+      description: 'Compact transformer model engineered for lightweight edge devices. Fast token generation, logic, and rapid academic explanations.',
       sourceUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF/resolve/main/smollm2-360m-instruct-q4_k_m.gguf',
       contextWindow: 2048,
+      quantization: 'Q4_K_M GGUF',
+      minRam: '3 GB',
+      recommendedRam: '4GB–6GB',
+      latency: '~85ms'
     }
   };
 
@@ -46,7 +59,56 @@
     models: MOBILE_MODELS,
 
     /**
-     * Check if an offline neural model is already installed in local storage
+     * Return list of all locally downloaded models
+     */
+    getDownloadedModels() {
+      try {
+        const raw = localStorage.getItem(DOWNLOADED_MODELS_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        const active = this.getInstalledModelInfo();
+        if (active && !list.some(m => m.id === active.id)) {
+          list.push(active);
+        }
+        return list;
+      } catch (e) {
+        return [];
+      }
+    },
+
+    /**
+     * Check if a specific model weights file is downloaded on device
+     */
+    async isModelDownloaded(modelId) {
+      const list = this.getDownloadedModels();
+      if (list.some(m => m.id === modelId)) return true;
+      if (typeof caches !== 'undefined') {
+        try {
+          const cache = await caches.open(CACHE_NAME);
+          const match = await cache.match(`/models/${modelId}.bin`);
+          return Boolean(match);
+        } catch (e) {}
+      }
+      return false;
+    },
+
+    /**
+     * Set a downloaded model as the active on-device inference model
+     */
+    setActiveModel(modelId) {
+      const modelMeta = MOBILE_MODELS[modelId];
+      if (!modelMeta) return false;
+      const record = {
+        id: modelMeta.id,
+        displayName: modelMeta.displayName,
+        installedAt: new Date().toISOString(),
+        sizeMb: (modelMeta.sizeBytes / (1024 * 1024)).toFixed(1),
+      };
+      localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(record));
+      return true;
+    },
+
+    /**
+     * Check if an offline neural model is currently active
      */
     async isModelInstalled(modelId = 'oryqen-mobile-core') {
       const saved = localStorage.getItem(MODEL_STORAGE_KEY);
@@ -184,6 +246,11 @@
         };
         localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(modelRecord));
 
+        // Add to downloaded models list
+        const downloadedList = this.getDownloadedModels().filter(m => m.id !== modelMeta.id);
+        downloadedList.push(modelRecord);
+        localStorage.setItem(DOWNLOADED_MODELS_KEY, JSON.stringify(downloadedList));
+
         const finalMb = (effectiveTotal / (1024 * 1024)).toFixed(1);
         if (typeof onProgress === 'function') {
           onProgress({
@@ -225,7 +292,20 @@
           const cache = await caches.open(CACHE_NAME);
           await cache.delete(`/models/${modelId}.bin`);
         }
-        localStorage.removeItem(MODEL_STORAGE_KEY);
+        
+        // Remove from downloaded models catalog
+        const updatedList = this.getDownloadedModels().filter(m => m.id !== modelId);
+        localStorage.setItem(DOWNLOADED_MODELS_KEY, JSON.stringify(updatedList));
+
+        // If the deleted model was the currently active one, update active model
+        const active = this.getInstalledModelInfo();
+        if (active && active.id === modelId) {
+          if (updatedList.length > 0) {
+            localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(updatedList[0]));
+          } else {
+            localStorage.removeItem(MODEL_STORAGE_KEY);
+          }
+        }
         return true;
       } catch (e) {
         return false;

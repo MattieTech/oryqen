@@ -54,3 +54,4 @@ android/app/build/
 android/capacitor-cordova-android-plugins/build/
 *.apk
 *.aab
+scratch/

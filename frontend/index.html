@@ -1351,117 +1351,54 @@
               </div>
             </div>
 
-            <!-- Select Preferred Active Model -->
+            <!-- Select & Manage On-Device Models -->
             <div class="settings-section">
               <div class="section-title-row">
-                <div class="settings-section-title">Select Preferred Model Tier</div>
-                <span class="badge badge-accent" id="preferredModelBadge">Active: ORYQEN Local Core</span>
+                <div class="settings-section-title">On-Device Offline Neural Models</div>
+                <span class="badge badge-accent" id="preferredModelBadge">Active: ORYQEN Mobile Core</span>
               </div>
-              <p class="settings-help">The system automatically recommends the optimal model for your phone or laptop hardware. You can select your preferred tier below:</p>
+              <p class="settings-help">The system automatically recommends the optimal model for your device specifications, but you have complete control to download, activate, or remove any model below:</p>
               
-              <div class="model-tier-grid" id="modelTierGrid">
-                <!-- Tier 1: Nano (0.5B) -->
-                <div class="model-tier-card" data-tier="nano">
-                  <div class="tier-card-top">
-                    <span class="tier-name">ORYQEN Nano</span>
-                    <span class="tier-badge">Ultra-Light (0.5B)</span>
-                  </div>
-                  <p class="tier-desc">Engineered for low-spec phones & tablets (&le; 4GB RAM). Instant execution, ultra-low memory.</p>
-                  <div class="tier-footer">
-                    <span class="tier-ram-tag">&le; 4GB RAM</span>
-                    <button type="button" class="btn btn-sm btn-secondary select-tier-btn" data-model="nano">Select</button>
-                  </div>
+              <!-- In-Settings Download Progress (shown while pulling model) -->
+              <div class="settings-download-box hidden" id="modelDownloadProgressWrap">
+                <div class="download-progress-header">
+                  <span class="download-progress-title" id="modelDownloadTitle">Downloading Neural Weights...</span>
+                  <span class="download-progress-pct" id="modelDownloadPercentText">0%</span>
                 </div>
+                <div class="progress-bar-track">
+                  <div class="progress-bar-fill" id="modelDownloadProgressBar" style="width: 0%;"></div>
+                </div>
+                <div class="download-progress-meta">
+                  <span id="modelDownloadStatusText">Initializing stream...</span>
+                  <span id="modelDownloadTransferredText">0 MB / 0 MB</span>
+                  <span id="modelDownloadSpeedText">Speed: --</span>
+                </div>
+              </div>
 
-                <!-- Tier 2: Core (1.5B) -->
-                <div class="model-tier-card active" data-tier="core">
-                  <div class="tier-card-top">
-                    <span class="tier-name">ORYQEN Local Core</span>
-                    <span class="tier-badge active">Balanced (1.5B)</span>
-                  </div>
-                  <p class="tier-desc">Balanced academic reasoning, step-by-step math, and conceptual explanations. 100% offline.</p>
-                  <div class="tier-footer">
-                    <span class="tier-ram-tag">4GB–8GB RAM</span>
-                    <button type="button" class="btn btn-sm btn-primary select-tier-btn" data-model="core">Active</button>
-                  </div>
-                </div>
-
-                <!-- Tier 3: Pro (7B) -->
-                <div class="model-tier-card" data-tier="pro">
-                  <div class="tier-card-top">
-                    <span class="tier-name">ORYQEN Pro</span>
-                    <span class="tier-badge">Heavyweight (7B)</span>
-                  </div>
-                  <p class="tier-desc">Complex STEM problem solving, university-level calculus, and coding synthesis.</p>
-                  <div class="tier-footer">
-                    <span class="tier-ram-tag">8GB+ RAM</span>
-                    <button type="button" class="btn btn-sm btn-secondary select-tier-btn" data-model="pro">Select</button>
-                  </div>
-                </div>
-
-                <!-- Tier 4: Swift (Cloud) -->
-                <div class="model-tier-card" data-tier="swift">
-                  <div class="tier-card-top">
-                    <span class="tier-name">ORYQEN Swift (Cloud)</span>
-                    <span class="tier-badge online">Cloud Online</span>
-                  </div>
-                  <p class="tier-desc">Zero on-device memory footprint. Cloud intelligence with live web research capability.</p>
-                  <div class="tier-footer">
-                    <span class="tier-ram-tag">Any Device</span>
-                    <button type="button" class="btn btn-sm btn-secondary select-tier-btn" data-model="swift">Select</button>
-                  </div>
-                </div>
+              <!-- Dynamic Model Cards populated by loadModelCatalog() -->
+              <div class="offline-models-settings-grid" id="settingsModelsCatalog">
+                <div class="loading-state-mini">Loading on-device model catalog...</div>
               </div>
             </div>
 
+            <!-- Active Inference Engines Overview -->
             <div class="settings-section">
-              <div class="settings-section-title">Active Inference Engines</div>
+              <div class="settings-section-title">Active Inference Engines Overview</div>
               <div class="model-status-summary-grid">
                 <div class="model-status-card" id="cardStatusCloud">
                   <div class="model-status-card-header">
                     <span class="engine-badge online">Cloud Online</span>
-                    <span class="engine-title">ORYQEN Swift</span>
+                    <span class="engine-title">ORYQEN Swift (Cloud)</span>
                   </div>
-                  <p class="model-status-desc">Powered by Google Gemini & OpenRouter for live web research and deep synthesis.</p>
+                  <p class="model-status-desc">Zero on-device memory footprint. Leverages Google Gemini & OpenRouter for live web research and multi-step synthesis when internet is active.</p>
                 </div>
                 <div class="model-status-card" id="cardStatusLocal">
                   <div class="model-status-card-header">
-                    <span class="engine-badge offline" id="localDaemonBadge">Local Standby</span>
-                    <span class="engine-title" id="localActiveModelTitle">ORYQEN Local Core</span>
+                    <span class="engine-badge offline" id="localDaemonBadge">Local Active</span>
+                    <span class="engine-title" id="localActiveModelTitle">ORYQEN Mobile Core</span>
                   </div>
-                  <p class="model-status-desc" id="localDaemonDesc">100% on-device neural weights. Operates with zero internet connectivity.</p>
+                  <p class="model-status-desc" id="localDaemonDesc">100% on-device neural weights. Operates inside Airplane mode with zero internet connection.</p>
                 </div>
-              </div>
-            </div>
-
-            <div class="settings-section">
-              <div class="section-title-row">
-                <div class="settings-section-title">Installed Local Models</div>
-                <span class="badge badge-accent" id="storageUsageBadge">Storage: Checking...</span>
-              </div>
-              <p class="settings-help">Genuine GGUF neural models running on your device. Zero cloud dependency.</p>
-              <div class="installed-models-list" id="installedModelsList">
-                <div class="loading-state-mini">Loading model catalog...</div>
-              </div>
-            </div>
-
-            <!-- Download Progress Indicator (Shown while pulling model) -->
-            <div class="settings-section hidden" id="modelDownloadProgressWrap">
-              <div class="settings-section-title" id="modelDownloadTitle">Downloading Model...</div>
-              <div class="progress-bar-track">
-                <div class="progress-bar-fill" id="modelDownloadProgressBar" style="width: 0%;"></div>
-              </div>
-              <div class="progress-text-row">
-                <span id="modelDownloadStatusText">Initializing download stream...</span>
-                <span id="modelDownloadPercentText">0%</span>
-              </div>
-            </div>
-
-            <div class="settings-section">
-              <div class="settings-section-title">Available Models Library</div>
-              <p class="settings-help">Download optimized, verified edge models directly to your machine with 1 click.</p>
-              <div class="recommended-models-grid" id="recommendedModelsCatalog">
-                <!-- Dynamically populated via loadModelCatalog() -->
               </div>
             </div>
           </div>

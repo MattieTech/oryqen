@@ -105,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupConnectivityListeners();
   setupScrollToBottomFab();
   setupOfflineBrainModal();
+  initHardwareAdvisor();
 
   // Load initial data
   setAiMode(state.mode, false);
@@ -3882,87 +3883,30 @@ function setupConnectivityListeners() {
 }
 
 // ==========================================================================
-// Model Management & Memory Governance Handlers
+// Settings Modal & Model Management
 // ==========================================================================
-async function loadModelCatalog() {
-  const installedContainer = document.getElementById('installedModelsList');
-  const recommendedContainer = document.getElementById('recommendedModelsCatalog');
-  const storageBadge = document.getElementById('storageUsageBadge');
+function openSettingsModal(targetTab = null) {
+  const modal = document.getElementById('settingsModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
 
-  try {
-    const res = await fetch(`${API_BASE}/api/models`);
-    if (!res.ok) throw new Error('Failed to fetch model catalog');
-    const data = await res.json();
+  initHardwareAdvisor();
 
-    if (storageBadge) {
-      storageBadge.textContent = `Storage: ${data.storage_used || 'Checking...'}`;
+  if (targetTab) {
+    document.querySelectorAll('.settings-nav-item').forEach(n => {
+      if (n.dataset.tab === targetTab) n.click();
+    });
+  } else {
+    const activeNav = document.querySelector('.settings-nav-item.active');
+    if (activeNav?.dataset?.tab === 'models') {
+      loadModelCatalog();
     }
-
-    // Installed Models
-    if (installedContainer) {
-      if (!data.installed_local_models || data.installed_local_models.length === 0) {
-        installedContainer.innerHTML = '<div style="font-size:12.5px; color:var(--text-muted); padding:10px 0;">No local models installed yet. Choose a recommended model below to enable genuine offline inference.</div>';
-      } else {
-        installedContainer.innerHTML = data.installed_local_models.map(m => `
-          <div class="installed-model-item">
-            <div class="model-meta-info">
-              <div class="model-name-row">
-                <span class="model-name-title">${escapeHtml(m.name)}</span>
-                <span class="model-tag-badge">Genuine Neural</span>
-              </div>
-              <span class="model-size-badge">Disk: ${escapeHtml(m.size)} • Modified: ${escapeHtml(m.modified_at || 'Installed')}</span>
-            </div>
-            <button type="button" class="btn btn-sm btn-ghost text-danger" onclick="deleteLocalModel('${escapeHtml(m.name)}')">
-              Remove
-            </button>
-          </div>
-        `).join('');
-      }
-    }
-
-    // Recommended Models Library
-    if (recommendedContainer) {
-      const installedNames = (data.installed_local_models || []).map(m => m.name.toLowerCase());
-      recommendedContainer.innerHTML = (data.recommended_local_models || []).map(rec => {
-        const isInstalled = installedNames.some(n => n.includes(rec.name.toLowerCase()) || rec.name.toLowerCase().includes(n.split(':')[0]));
-        return `
-          <div class="model-catalog-card">
-            <div>
-              <div class="catalog-card-header">
-                <span class="catalog-card-title">${escapeHtml(rec.display_name)}</span>
-                <span class="catalog-card-meta">${escapeHtml(rec.size)}</span>
-              </div>
-              <p class="catalog-card-desc" style="margin-top:6px;">${escapeHtml(rec.description)}</p>
-              <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">
-                Engine: ${escapeHtml(rec.name)} • Params: ${escapeHtml(rec.parameters)}
-              </div>
-            </div>
-            <div>
-              ${isInstalled ? `
-                <button type="button" class="btn btn-sm btn-secondary full-width" disabled style="opacity:0.8;">
-                  ✓ Installed & Ready
-                </button>
-              ` : `
-                <button type="button" class="btn btn-sm btn-primary full-width" onclick="pullLocalModel('${escapeHtml(rec.name)}')">
-                  Download Model (${escapeHtml(rec.size)})
-                </button>
-              `}
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    // Initialize hardware diagnostics and recommendation
-    initHardwareAdvisor();
-  } catch (err) {
-    if (installedContainer) installedContainer.innerHTML = `<div style="font-size:12px; color:#ef4444;">Failed to load model catalog: ${err.message}</div>`;
   }
 }
 
-// ==========================================================================
-// Hardware Capability & Model Recommendation Engine
-// ==========================================================================
+// Hardware Capability & Dynamic Model Recommendation Engine
+let systemRecommendedModelId = 'oryqen-mobile-core';
+
 async function initHardwareAdvisor() {
   const ramEl = document.getElementById('hwMetricRam');
   const coresEl = document.getElementById('hwMetricCores');
@@ -3971,20 +3915,19 @@ async function initHardwareAdvisor() {
   const statsText = document.getElementById('hardwareStatsText');
   const recBadge = document.getElementById('hardwareRecBadge');
 
-  const ramGB = navigator.deviceMemory || 8;
+  const ramGB = navigator.deviceMemory || 4;
   if (ramEl) ramEl.textContent = `~${ramGB} GB RAM`;
 
-  const cores = navigator.hardwareConcurrency || 8;
+  const cores = navigator.hardwareConcurrency || 4;
   if (coresEl) coresEl.textContent = `${cores} Cores`;
 
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
   if (tierEl) tierEl.textContent = isMobile ? 'Mobile Phone' : 'Desktop / PC';
 
-  if (navigator.storage && navigator.storage.estimate) {
+  if (window.OfflineEngine?.getStorageEstimate) {
     try {
-      const estimate = await navigator.storage.estimate();
-      const freeGB = ((estimate.quota - estimate.usage) / (1024 * 1024 * 1024)).toFixed(1);
-      if (storageEl) storageEl.textContent = `${freeGB} GB Available`;
+      const storage = await window.OfflineEngine.getStorageEstimate();
+      if (storageEl) storageEl.textContent = `${storage.availableMb} MB Free`;
     } catch (e) {
       if (storageEl) storageEl.textContent = 'Storage Ready';
     }
@@ -3992,147 +3935,178 @@ async function initHardwareAdvisor() {
     if (storageEl) storageEl.textContent = 'Storage Ready';
   }
 
-  let recModel = 'core';
-  let recTitle = 'Recommended: ORYQEN Local Core';
-  if (ramGB <= 4 || (isMobile && ramGB < 6)) {
-    recModel = 'nano';
-    recTitle = 'Recommended: ORYQEN Nano (0.5B for ≤ 4GB)';
-  } else if (ramGB >= 12 && cores >= 8) {
-    recModel = 'pro';
-    recTitle = 'Recommended: ORYQEN Pro (7B Heavyweight)';
+  // Dynamic system recommendation based on hardware capability
+  if (ramGB <= 4 || isMobile) {
+    systemRecommendedModelId = 'oryqen-mobile-core';
+    if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Mobile Core (~12 MB)';
+    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM on ${isMobile ? 'Mobile' : 'Device'}. ORYQEN Mobile Core is optimal (zero crash, instant setup).`;
+  } else if (ramGB >= 8) {
+    systemRecommendedModelId = 'qwen2.5-0.5b';
+    if (recBadge) recBadge.textContent = 'Recommended: Qwen2.5 0.5B (~350 MB)';
+    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM & ${cores} Cores. Device is capable of running deep mathematical GGUF weights.`;
   } else {
-    recModel = 'core';
-    recTitle = 'Recommended: ORYQEN Local Core (1.5B Balanced)';
+    systemRecommendedModelId = 'smollm2-360m';
+    if (recBadge) recBadge.textContent = 'Recommended: SmolLM2 360M (~220 MB)';
+    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM & ${cores} Cores. Compact transformer recommended for balanced reasoning.`;
   }
 
-  if (recBadge) recBadge.textContent = recTitle;
-  if (statsText) statsText.textContent = `Detected ${ramGB} GB RAM, ${cores} Logical Cores on ${isMobile ? 'Mobile' : 'Desktop'}. System ready for offline neural execution.`;
-
-  document.querySelectorAll('.model-tier-card').forEach(card => {
-    const isRecommended = card.dataset.tier === recModel;
-    if (isRecommended && !card.querySelector('.hw-rec-tag')) {
-      const tag = document.createElement('span');
-      tag.className = 'hw-rec-tag';
-      tag.textContent = '★ System Match';
-      card.querySelector('.tier-card-top')?.appendChild(tag);
-    }
-  });
-
-  const savedTier = localStorage.getItem('oryqen_preferred_model') || recModel;
-  selectModelTier(savedTier, false);
-
-  document.querySelectorAll('.select-tier-btn').forEach(btn => {
-    btn.onclick = (e) => {
-      const model = e.currentTarget.dataset.model;
-      selectModelTier(model, true);
-    };
-  });
+  loadModelCatalog();
 }
 
-function selectModelTier(tier, notify = true) {
-  localStorage.setItem('oryqen_preferred_model', tier);
+async function loadModelCatalog() {
+  const container = document.getElementById('settingsModelsCatalog');
+  if (!container || !window.OfflineEngine) return;
 
-  const tierNames = {
-    nano: 'ORYQEN Nano (0.5B)',
-    core: 'ORYQEN Local Core (1.5B)',
-    pro: 'ORYQEN Pro (7B)',
-    swift: 'ORYQEN Swift (Cloud)',
-  };
-
-  document.querySelectorAll('.model-tier-card').forEach(card => {
-    const isSelected = card.dataset.tier === tier;
-    card.classList.toggle('active', isSelected);
-    const btn = card.querySelector('.select-tier-btn');
-    if (btn) {
-      btn.textContent = isSelected ? 'Active' : 'Select';
-      btn.className = isSelected ? 'btn btn-sm btn-primary select-tier-btn' : 'btn btn-sm btn-secondary select-tier-btn';
-    }
-  });
+  const models = window.OfflineEngine.models;
+  const activeModel = window.OfflineEngine.getInstalledModelInfo();
+  const activeId = activeModel?.id || 'oryqen-mobile-core';
 
   const badge = document.getElementById('preferredModelBadge');
-  if (badge) badge.textContent = `Active: ${tierNames[tier] || 'ORYQEN Local Core'}`;
-
-  if (notify) {
-    showToast(`Active model preference set to: ${tierNames[tier] || tier}`);
+  if (badge) {
+    const activeMeta = models[activeId] || activeModel;
+    badge.textContent = `Active: ${activeMeta?.displayName || 'ORYQEN Mobile Core'}`;
   }
+
+  const localTitle = document.getElementById('localActiveModelTitle');
+  if (localTitle) {
+    localTitle.textContent = models[activeId]?.displayName || 'ORYQEN Mobile Core';
+  }
+
+  const htmlParts = [];
+
+  for (const [id, meta] of Object.entries(models)) {
+    const isDownloaded = await window.OfflineEngine.isModelDownloaded(id);
+    const isActive = activeId === id && isDownloaded;
+    const isRecommended = id === systemRecommendedModelId;
+
+    let statusHtml = '';
+    let actionButtonsHtml = '';
+
+    if (isActive) {
+      statusHtml = `<span class="model-status-indicator" style="color: #10b981;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> Active Engine</span>`;
+      actionButtonsHtml = `
+        <button type="button" class="btn btn-sm btn-success" disabled>Active</button>
+        <button type="button" class="btn btn-sm btn-ghost text-danger" onclick="deleteModelFromSettings('${id}')" title="Delete model weights">Delete</button>
+      `;
+    } else if (isDownloaded) {
+      statusHtml = `<span class="model-status-indicator" style="color: #38bdf8;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Downloaded & Ready</span>`;
+      actionButtonsHtml = `
+        <button type="button" class="btn btn-sm btn-primary" onclick="activateModelFromSettings('${id}')">Activate</button>
+        <button type="button" class="btn btn-sm btn-ghost text-danger" onclick="deleteModelFromSettings('${id}')" title="Delete model weights">Delete</button>
+      `;
+    } else {
+      statusHtml = `<span class="model-status-indicator" style="color: var(--text-muted);"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Available to Download</span>`;
+      actionButtonsHtml = `
+        <button type="button" class="btn btn-sm btn-primary" onclick="downloadModelFromSettings('${id}')">Download (${meta.sizeFormatted})</button>
+      `;
+    }
+
+    htmlParts.push(`
+      <div class="offline-model-settings-card ${isActive ? 'active' : ''} ${isRecommended ? 'recommended' : ''}" data-model-id="${id}">
+        <div class="model-card-top-row">
+          <div class="model-card-title-group">
+            <span class="model-card-title">${escapeHtml(meta.displayName)}</span>
+            <span class="model-size-badge">${escapeHtml(meta.sizeFormatted)}</span>
+            ${isRecommended ? '<span class="model-rec-tag">★ System Recommended for Your Device</span>' : ''}
+          </div>
+        </div>
+        <p class="model-card-desc">${escapeHtml(meta.description)}</p>
+        <div class="model-specs-bar">
+          <span>Format: ${escapeHtml(meta.quantization || 'Native')}</span>
+          <span>Context: ${meta.contextWindow || 4096} tokens</span>
+          <span>Latency: ${escapeHtml(meta.latency || '< 50ms')}</span>
+          <span>Min RAM: ${escapeHtml(meta.minRam || '2 GB')}</span>
+        </div>
+        <div class="model-card-actions-row">
+          <div>${statusHtml}</div>
+          <div class="model-actions-group">${actionButtonsHtml}</div>
+        </div>
+      </div>
+    `);
+  }
+
+  container.innerHTML = htmlParts.join('');
 }
 
-async function pullLocalModel(modelName) {
+async function downloadModelFromSettings(modelId) {
+  const modelMeta = window.OfflineEngine?.models?.[modelId];
+  if (!modelMeta) return;
+
   const progressWrap = document.getElementById('modelDownloadProgressWrap');
   const titleEl = document.getElementById('modelDownloadTitle');
   const barEl = document.getElementById('modelDownloadProgressBar');
   const statusEl = document.getElementById('modelDownloadStatusText');
   const pctEl = document.getElementById('modelDownloadPercentText');
+  const transEl = document.getElementById('modelDownloadTransferredText');
+  const speedEl = document.getElementById('modelDownloadSpeedText');
 
   progressWrap?.classList.remove('hidden');
-  if (titleEl) titleEl.textContent = `Downloading ${modelName}...`;
+  if (titleEl) titleEl.textContent = `Downloading ${modelMeta.displayName}...`;
   if (barEl) barEl.style.width = '0%';
-  if (statusEl) statusEl.textContent = 'Contacting model registry...';
+  if (statusEl) statusEl.textContent = 'Initializing secure stream...';
   if (pctEl) pctEl.textContent = '0%';
-  showToast(`Starting download for ${modelName}...`);
+  if (transEl) transEl.textContent = `0 MB / ${modelMeta.sizeFormatted}`;
+  if (speedEl) speedEl.textContent = 'Speed: --';
+
+  showToast(`Downloading ${modelMeta.displayName}...`);
 
   try {
-    const res = await fetch(`${API_BASE}/api/models/pull`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: modelName })
+    await window.OfflineEngine.downloadModel(modelId, (p) => {
+      if (pctEl) pctEl.textContent = `${p.percent}%`;
+      if (barEl) barEl.style.width = `${p.percent}%`;
+      if (statusEl) statusEl.textContent = p.percent === 100 ? 'Download complete!' : 'Transferring neural weights...';
+      if (transEl && p.transferredMb) {
+        transEl.textContent = `${p.transferredMb} MB / ${p.totalMb || modelMeta.sizeFormatted}`;
+      }
+      if (speedEl && p.speedMbps) {
+        speedEl.textContent = p.speedMbps === 'Cached' ? 'Saved to local cache' : `Speed: ${p.speedMbps} MB/s`;
+      }
     });
 
-    if (!res.ok) throw new Error('Download request failed');
+    showToast(`${modelMeta.displayName} installed & set as active offline engine!`);
+    setTimeout(() => progressWrap?.classList.add('hidden'), 1500);
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const jsonStr = line.slice(6).trim();
-        if (jsonStr === '[DONE]') break;
-        try {
-          const payload = JSON.parse(jsonStr);
-          if (payload.status && statusEl) statusEl.textContent = payload.status;
-          if (payload.total && payload.completed) {
-            const pct = Math.min(100, Math.round((payload.completed / payload.total) * 100));
-            if (barEl) barEl.style.width = `${pct}%`;
-            if (pctEl) pctEl.textContent = `${pct}%`;
-          }
-        } catch (e) {}
-      }
-    }
-
-    if (barEl) barEl.style.width = '100%';
-    if (pctEl) pctEl.textContent = '100%';
-    if (statusEl) statusEl.textContent = 'Installation complete!';
-    showToast(`Model ${modelName} downloaded and ready for offline use!`);
-    setTimeout(() => progressWrap?.classList.add('hidden'), 2500);
     loadModelCatalog();
+    if (typeof refreshOfflineBrainUI === 'function') refreshOfflineBrainUI();
     updateHonestStatus();
   } catch (err) {
     if (statusEl) statusEl.textContent = `Download failed: ${err.message}`;
-    showToast(`Failed to download model: ${err.message}`, 'error');
+    showToast(`Download failed: ${err.message}`, 'error');
   }
 }
 
-async function deleteLocalModel(modelName) {
-  if (!confirm(`Remove local model "${modelName}" from your device storage?`)) return;
-  try {
-    showToast(`Removing ${modelName}...`);
-    const res = await fetch(`${API_BASE}/api/models/${encodeURIComponent(modelName)}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Deletion failed');
-    showToast(`Model ${modelName} removed.`);
+function activateModelFromSettings(modelId) {
+  if (!window.OfflineEngine) return;
+  const success = window.OfflineEngine.setActiveModel(modelId);
+  if (success) {
+    const meta = window.OfflineEngine.models[modelId];
+    showToast(`Activated ${meta?.displayName || modelId} as active on-device engine.`);
     loadModelCatalog();
+    if (typeof refreshOfflineBrainUI === 'function') refreshOfflineBrainUI();
     updateHonestStatus();
-  } catch (err) {
-    showToast(err.message, 'error');
   }
 }
+
+async function deleteModelFromSettings(modelId) {
+  const meta = window.OfflineEngine?.models?.[modelId];
+  const name = meta?.displayName || modelId;
+  if (!confirm(`Remove on-device neural weights for "${name}" from this device?`)) return;
+
+  try {
+    await window.OfflineEngine.deleteInstalledModel(modelId);
+    showToast(`${name} weights removed from device.`);
+    loadModelCatalog();
+    if (typeof refreshOfflineBrainUI === 'function') refreshOfflineBrainUI();
+    updateHonestStatus();
+  } catch (err) {
+    showToast(`Failed to remove model: ${err.message}`, 'error');
+  }
+}
+
+window.downloadModelFromSettings = downloadModelFromSettings;
+window.activateModelFromSettings = activateModelFromSettings;
+window.deleteModelFromSettings = deleteModelFromSettings;
+window.openSettingsModal = openSettingsModal;
 
 async function loadMemoryGovernance() {
   const list = document.getElementById('memoryItemsList');
@@ -4166,7 +4140,7 @@ async function deleteMemoryGovernanceItem(id) {
   }
 }
 
-window.deleteLocalModel = deleteLocalModel;
-window.pullLocalModel = pullLocalModel;
+window.deleteLocalModel = deleteModelFromSettings;
+window.pullLocalModel = downloadModelFromSettings;
 window.deleteMemoryGovernanceItem = deleteMemoryGovernanceItem;
 
