@@ -434,7 +434,7 @@ async function updateHonestStatus() {
       const isOllamaActive = Boolean(data.ollama_active ?? data.ollama_daemon_active);
       const localModels = (Array.isArray(data.local_models_available) && data.local_models_available.length > 0)
         ? data.local_models_available
-        : (data.local_model_available ? [data.active_local_model || 'Local Model'] : (isOllamaActive ? ['qwen2.5:0.5b'] : []));
+        : (data.local_model_available ? [data.active_local_model || 'Local Model'] : (isOllamaActive ? ['ORYQEN Scholar Pro'] : []));
       const hasOnDeviceModel = Boolean(window.OfflineEngine?.getInstalledModelInfo?.());
       const hasLocalModel = data.local_model_available || isOllamaActive || hasOnDeviceModel;
 
