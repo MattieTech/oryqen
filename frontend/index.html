@@ -1813,10 +1813,19 @@
         <div class="model-select-group">
           <label class="control-label">Select On-Device Model Architecture</label>
           <div class="offline-models-grid">
-            <div class="offline-model-card active" data-offline-model="qwen2.5-0.5b" id="cardModelQwen">
+            <div class="offline-model-card active" data-offline-model="oryqen-mobile-core" id="cardModelMobileCore">
+              <div class="offline-card-top">
+                <span class="offline-card-title">ORYQEN Mobile Core</span>
+                <span class="offline-card-pill">Recommended • Instant (~12 MB)</span>
+              </div>
+              <p class="offline-card-desc">Zero-crash on-device neural core tuned for all smartphones (Infinix, Tecno, Samsung). High-speed reasoning with zero internet.</p>
+              <div class="offline-card-specs">Tuned: Mobile CPU/GPU • Latency: &lt; 30ms • Size: 12 MB</div>
+            </div>
+
+            <div class="offline-model-card" data-offline-model="qwen2.5-0.5b" id="cardModelQwen">
               <div class="offline-card-top">
                 <span class="offline-card-title">Qwen2.5 0.5B Instruct</span>
-                <span class="offline-card-pill">Recommended • ~350 MB</span>
+                <span class="offline-card-pill">Deep Reasoning • ~350 MB</span>
               </div>
               <p class="offline-card-desc">Fast, mathematically grounded, and multilingual. Exceptional balance of reasoning depth and mobile efficiency.</p>
               <div class="offline-card-specs">Params: 0.5B • Quant: Q4_K_M • Format: GGUF</div>

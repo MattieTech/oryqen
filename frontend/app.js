@@ -6,15 +6,24 @@
  */
 
 // Configuration
-// When served by FastAPI (locally on port 8000, via local hotspot IP, or on Render/Cloud HTTPS),
-// API requests are relative to the current origin (API_BASE = '').
-// Only fallback to 'http://localhost:8000' if opening index.html via an external dev server (:5500, :3000, :5173) or file://
-const isDevFrontendOnly = window.location.protocol === 'file:' || 
+// Native mobile Capacitor / Android WebView detection
+const isNativeApp = Boolean(window.Capacitor?.isNativePlatform?.()) || 
+  window.location.origin === 'https://localhost' || 
+  window.location.origin === 'http://localhost' || 
+  window.location.origin === 'capacitor://localhost' ||
+  window.location.protocol === 'file:';
+
+// Fallback to local server only when serving pure frontend from dev port (5500, 3000, 5173)
+const isDevFrontendOnly = !isNativeApp && (
   window.location.port === '5500' || 
   window.location.port === '3000' || 
-  window.location.port === '5173';
+  window.location.port === '5173'
+);
 
-const API_BASE = isDevFrontendOnly ? 'http://localhost:8000' : '';
+const CLOUD_API_BASE = 'https://oryqen.onrender.com';
+const API_BASE = isNativeApp 
+  ? CLOUD_API_BASE 
+  : (isDevFrontendOnly ? 'http://localhost:8000' : '');
 
 // Cloud deployment detection (Render, Railway, custom domains, etc.)
 const isCloudHosted = window.location.hostname.includes('render.com') || 
@@ -223,6 +232,9 @@ function setupNavigation() {
     backdrop?.classList.remove('active');
     if (openBtn) openBtn.style.setProperty('display', 'inline-flex', 'important');
   }
+
+  window.openSidebar = openSidebar;
+  window.closeSidebar = closeSidebar;
 
   openBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1307,11 +1319,19 @@ async function submitUserMessage(overrideQuery) {
       removeElement(thinkingId);
       appendMessageRow({
         role: 'assistant',
-        content: 'To chat offline directly on your phone with zero internet, please download your on-device neural brain (~350 MB once over WiFi).\n\n<button type="button" class="btn btn-sm btn-primary" id="promptOpenOfflineBrainBtn" style="margin-top:8px;">Download Offline Brain</button>',
+        content: 'To chat offline directly on your phone with zero internet, please set up your on-device neural brain.',
         model: 'ORYQEN Standby',
-      });
-      document.getElementById('promptOpenOfflineBrainBtn')?.addEventListener('click', () => {
-        document.getElementById('offlineBrainModal')?.classList.remove('hidden');
+        actionButton: {
+          text: 'Download Offline Brain',
+          icon: '⚡',
+          onClick: () => {
+            if (window.innerWidth <= 768 && window.closeSidebar) window.closeSidebar();
+            document.getElementById('offlineBrainModal')?.classList.remove('hidden');
+            if (typeof window.refreshOfflineBrainUI === 'function') {
+              window.refreshOfflineBrainUI();
+            }
+          }
+        }
       });
       setGeneratingState(false);
       showTypingIndicator(false);
@@ -1411,6 +1431,17 @@ async function submitUserMessage(overrideQuery) {
             role: 'assistant',
             content: 'I am temporarily unable to reach the neural servers. Please check your internet connection, or download the Offline Brain in Settings to chat with zero internet.',
             model: 'ORYQEN Standby',
+            actionButton: {
+              text: 'Open Offline Brain Settings',
+              icon: '⚡',
+              onClick: () => {
+                if (window.innerWidth <= 768 && window.closeSidebar) window.closeSidebar();
+                document.getElementById('offlineBrainModal')?.classList.remove('hidden');
+                if (typeof window.refreshOfflineBrainUI === 'function') {
+                  window.refreshOfflineBrainUI();
+                }
+              }
+            }
           });
         }
       } else {
@@ -1485,7 +1516,7 @@ function cleanOryqenModelName(raw) {
   return 'ORYQEN Swift';
 }
 
-function appendMessageRow({ role, content, citations = [], model = '', retryQuery = null }) {
+function appendMessageRow({ role, content, citations = [], model = '', retryQuery = null, actionButton = null }) {
   const row = document.createElement('div');
   row.className = `message-row ${role}`;
 
@@ -1514,6 +1545,24 @@ function appendMessageRow({ role, content, citations = [], model = '', retryQuer
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   bubble.innerHTML = formatMarkdown(content);
+
+  // If message includes an interactive action button, append it cleanly to the bubble
+  if (actionButton && actionButton.text) {
+    const btnWrap = document.createElement('div');
+    btnWrap.className = 'message-action-btn-wrap';
+    btnWrap.style.marginTop = '10px';
+    const actBtn = document.createElement('button');
+    actBtn.type = 'button';
+    actBtn.className = 'btn btn-sm btn-primary';
+    actBtn.innerHTML = `${actionButton.icon ? actionButton.icon + ' ' : ''}${escapeHtml(actionButton.text)}`;
+    actBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      actionButton.onClick?.();
+    });
+    btnWrap.appendChild(actBtn);
+    bubble.appendChild(btnWrap);
+  }
+
   contentWrap.appendChild(bubble);
 
   // Citations / Sources
@@ -1792,10 +1841,14 @@ function enhanceCodeBlocks() {
 }
 
 function startNewChat() {
+  if (window.innerWidth <= 768 && window.closeSidebar) {
+    window.closeSidebar();
+  }
   state.currentConversationId = null;
   localStorage.removeItem('oryqen_current_conv_id');
   state.messages = [];
-  document.getElementById('chatMessages').innerHTML = '';
+  const chatMessages = document.getElementById('chatMessages');
+  if (chatMessages) chatMessages.innerHTML = '';
 
   const welcomeGeneral = document.getElementById('welcomeGeneralScreen');
   const welcomeTutor = document.getElementById('welcomeTutorScreen');
@@ -1808,6 +1861,11 @@ function startNewChat() {
   }
 
   document.getElementById('currentChatTitle').textContent = 'ORYQEN';
+  const chatInput = document.getElementById('chatInput');
+  if (chatInput) {
+    chatInput.value = '';
+    chatInput.focus();
+  }
 }
 
 function renderMathFormula(formula, isBlock) {
@@ -2112,20 +2170,42 @@ function renderConversationsList() {
 async function openConversation(convId) {
   state.currentConversationId = convId;
   localStorage.setItem('oryqen_current_conv_id', convId);
+
+  if (window.innerWidth <= 768 && window.closeSidebar) {
+    window.closeSidebar();
+  }
+
+  let conv = state.conversations.find(c => c.id === convId) || null;
+  let msgs = [];
+
+  // Try local cached messages first for zero-latency / offline resilience
+  try {
+    const cached = localStorage.getItem(`oryqen_conv_msgs_${convId}`);
+    if (cached) {
+      msgs = JSON.parse(cached) || [];
+    }
+  } catch (e) {}
+
   try {
     const res = await fetch(`${API_BASE}/api/conversations/${convId}`);
-    if (!res.ok) return;
-    const data = await res.json();
+    if (res.ok) {
+      const data = await res.json();
+      if (data.conversation) conv = data.conversation;
+      if (data.messages && data.messages.length > 0) {
+        msgs = data.messages;
+        localStorage.setItem(`oryqen_conv_msgs_${convId}`, JSON.stringify(msgs));
+      }
+    }
+  } catch (e) {
+    console.warn('Network conversation fetch failed, relying on local cache:', e);
+  }
 
-    const conv = data.conversation;
-    const msgs = data.messages || [];
+  const chatContainer = document.getElementById('chatMessages');
+  if (chatContainer) chatContainer.innerHTML = '';
+  state.messages = [];
 
-    const chatContainer = document.getElementById('chatMessages');
-    if (chatContainer) chatContainer.innerHTML = '';
-    state.messages = [];
-
-    const welcomeGeneral = document.getElementById('welcomeGeneralScreen');
-    const welcomeTutor = document.getElementById('welcomeTutorScreen');
+  const welcomeGeneral = document.getElementById('welcomeGeneralScreen');
+  const welcomeTutor = document.getElementById('welcomeTutorScreen');
 
     if (conv) {
       document.getElementById('currentChatTitle').textContent = conv.title || 'ORYQEN';
@@ -2188,9 +2268,6 @@ async function openConversation(convId) {
 
     renderConversationsList();
     scrollToBottom();
-  } catch (err) {
-    showToast('Failed to load conversation history.', 'error');
-  }
 }
 
 async function deleteConversation(convId) {
@@ -2815,7 +2892,7 @@ async function loadCurrentUser() {
 
 async function handleLogin(e) {
   e.preventDefault();
-  const email = document.getElementById('loginEmail')?.value;
+  const email = document.getElementById('loginEmail')?.value.trim();
   const password = document.getElementById('loginPassword')?.value;
   try {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
@@ -2823,11 +2900,16 @@ async function handleLogin(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    if (!res.ok) throw new Error('Invalid email or password');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Invalid email or password');
+    }
     const data = await res.json();
-    state.user = data.user;
-    showToast(`Welcome back, ${state.user.name}!`);
+    state.user = { ...data.user, tier: 'Pro Scholar' };
+    localStorage.setItem('oryqen_user_session', JSON.stringify(state.user));
+    updateAuthHeader();
     document.getElementById('authModal')?.classList.add('hidden');
+    showToast(`Welcome back, ${state.user.name}!`);
     loadCurrentUser();
     loadConversations();
   } catch (err) {
@@ -2837,20 +2919,22 @@ async function handleLogin(e) {
 
 async function handleRegister(e) {
   e.preventDefault();
-  const name = document.getElementById('regName')?.value;
-  const email = document.getElementById('regEmail')?.value;
+  const name = document.getElementById('regName')?.value.trim();
+  const email = document.getElementById('regEmail')?.value.trim();
   const password = document.getElementById('regPassword')?.value;
   const education_level = document.getElementById('regLevel')?.value;
+  const subjectsStr = document.getElementById('regSubjects')?.value.trim();
+  const preferred_subjects = subjectsStr ? subjectsStr.split(',').map(s => s.trim()) : [];
   let pendingRegistrationEmail = '';
 
   try {
     const res = await fetch(`${API_BASE}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, education_level }),
+      body: JSON.stringify({ name, email, password, education_level, preferred_subjects }),
     });
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Registration failed');
     }
     const data = await res.json();
@@ -2872,13 +2956,14 @@ async function handleRegister(e) {
 
       const otpInput = document.getElementById('otpInput');
       if (otpInput && data.otp_preview) {
-        otpInput.value = data.otp_preview; // Convenient auto-fill for instant verification
+        otpInput.value = data.otp_preview;
       }
 
       showToast(`Verification code: ${data.otp_preview || 'Sent to email'}`, 'info');
     } else {
-      state.user = data.user;
+      state.user = { ...data.user, tier: 'Pro Scholar' };
       localStorage.setItem('oryqen_user_session', JSON.stringify(state.user));
+      updateAuthHeader();
       showToast(`Account created! Welcome, ${state.user.name}!`);
       document.getElementById('authModal')?.classList.add('hidden');
       loadCurrentUser();
@@ -3225,61 +3310,6 @@ function handleSocialLogin(provider) {
   showToast(`Authenticated via ${provider} as ${state.user.name}!`);
 }
 
-async function handleLogin(e) {
-  e.preventDefault();
-  const email = document.getElementById('loginEmail')?.value.trim();
-  const password = document.getElementById('loginPassword')?.value;
-  try {
-    const res = await fetch(`${API_BASE}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || 'Invalid email or password');
-    }
-    const data = await res.json();
-    state.user = { ...data.user, tier: 'Pro Scholar' };
-    localStorage.setItem('oryqen_user_session', JSON.stringify(state.user));
-    updateAuthHeader();
-    document.getElementById('authModal')?.classList.add('hidden');
-    showToast(`Welcome back, ${state.user.name}!`);
-    loadConversations();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-async function handleRegister(e) {
-  e.preventDefault();
-  const name = document.getElementById('regName')?.value.trim();
-  const email = document.getElementById('regEmail')?.value.trim();
-  const password = document.getElementById('regPassword')?.value;
-  const education_level = document.getElementById('regLevel')?.value;
-  const subjectsStr = document.getElementById('regSubjects')?.value.trim();
-  const preferred_subjects = subjectsStr ? subjectsStr.split(',').map(s => s.trim()) : [];
-
-  try {
-    const res = await fetch(`${API_BASE}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, education_level, preferred_subjects }),
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || 'Registration failed');
-    }
-    const data = await res.json();
-    state.user = { ...data.user, tier: 'Pro Scholar' };
-    localStorage.setItem('oryqen_user_session', JSON.stringify(state.user));
-    updateAuthHeader();
-    document.getElementById('authModal')?.classList.add('hidden');
-    showToast(`Account created! Welcome to ORYQEN, ${state.user.name}!`);
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
 
 async function handleProfileUpdate(e) {
   e.preventDefault();
@@ -3636,7 +3666,7 @@ function setupOfflineBrainModal() {
   const modal = document.getElementById('offlineBrainModal');
   if (!modal || !window.OfflineEngine) return;
 
-  let selectedModelId = 'qwen2.5-0.5b';
+  let selectedModelId = 'oryqen-mobile-core';
 
   async function refreshOfflineBrainUI() {
     const storage = await window.OfflineEngine.getStorageEstimate();
@@ -3667,16 +3697,18 @@ function setupOfflineBrainModal() {
       startChatBtn?.classList.add('hidden');
       deleteBtn?.classList.add('hidden');
       if (pill) {
-        pill.textContent = '350 MB';
+        pill.textContent = '12 MB';
         pill.style.background = 'var(--primary)';
       }
     }
   }
 
+  window.refreshOfflineBrainUI = refreshOfflineBrainUI;
+
   // Open buttons
   document.getElementById('sidebarOfflineBrainBtn')?.addEventListener('click', () => {
-    if (window.innerWidth <= 768 && typeof closeSidebar === 'function') {
-      closeSidebar();
+    if (window.innerWidth <= 768 && window.closeSidebar) {
+      window.closeSidebar();
     }
     modal.classList.remove('hidden');
     refreshOfflineBrainUI();
@@ -3691,9 +3723,20 @@ function setupOfflineBrainModal() {
   });
 
   // Model Selection Cards
+  document.getElementById('cardModelMobileCore')?.addEventListener('click', () => {
+    selectedModelId = 'oryqen-mobile-core';
+    document.getElementById('cardModelMobileCore')?.classList.add('active');
+    document.getElementById('cardModelQwen')?.classList.remove('active');
+    document.getElementById('cardModelSmol')?.classList.remove('active');
+    const downloadBtn = document.getElementById('startOfflineDownloadBtn');
+    if (downloadBtn) downloadBtn.textContent = 'Install Mobile Core (~12 MB)';
+    refreshOfflineBrainUI();
+  });
+
   document.getElementById('cardModelQwen')?.addEventListener('click', () => {
     selectedModelId = 'qwen2.5-0.5b';
     document.getElementById('cardModelQwen')?.classList.add('active');
+    document.getElementById('cardModelMobileCore')?.classList.remove('active');
     document.getElementById('cardModelSmol')?.classList.remove('active');
     const downloadBtn = document.getElementById('startOfflineDownloadBtn');
     if (downloadBtn) downloadBtn.textContent = 'Download Offline Brain (350 MB)';
@@ -3703,6 +3746,7 @@ function setupOfflineBrainModal() {
   document.getElementById('cardModelSmol')?.addEventListener('click', () => {
     selectedModelId = 'smollm2-360m';
     document.getElementById('cardModelSmol')?.classList.add('active');
+    document.getElementById('cardModelMobileCore')?.classList.remove('active');
     document.getElementById('cardModelQwen')?.classList.remove('active');
     const downloadBtn = document.getElementById('startOfflineDownloadBtn');
     if (downloadBtn) downloadBtn.textContent = 'Download Offline Brain (220 MB)';
