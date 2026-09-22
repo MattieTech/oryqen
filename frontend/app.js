@@ -1320,8 +1320,7 @@ async function submitUserMessage(overrideQuery) {
       const installed = window.OfflineEngine.getInstalledModelInfo();
       const isDownloaded = installed && (await window.OfflineEngine.isModelDownloaded(installed.id));
       if (installed && isDownloaded) {
-        removeElement(thinkingId);
-        const assistantBubble = createStreamingAssistantRow(installed.displayName || 'ORYQEN On-Device Core');
+        let assistantBubble = null;
         let fullContent = '';
 
         // Inject attached document context if available
@@ -1340,23 +1339,30 @@ async function submitUserMessage(overrideQuery) {
         try {
           for await (const chunk of window.OfflineEngine.streamInference(query, sysPrompt, () => {})) {
             if (state.abortController?.signal?.aborted) break;
+            if (!assistantBubble) {
+              removeElement(thinkingId);
+              assistantBubble = createStreamingAssistantRow(installed.displayName || 'ORYQEN On-Device Core');
+            }
             fullContent += chunk.token;
             const displayContent = fullContent.replace(/^[\s?¿!.,]+(?=[A-Za-z])/, '');
-            updateStreamingAssistantRow(assistantBubble, displayContent);
+            updateStreamingAssistantRow(assistantBubble, displayContent, false);
             scrollToBottom();
           }
+          removeElement(thinkingId);
           fullContent = fullContent.replace(/^[\s?¿!.,]+(?=[A-Za-z])/, '').trim();
           if (!fullContent) {
             assistantBubble?.closest('.message-row')?.remove();
           } else {
-            updateStreamingAssistantRow(assistantBubble, fullContent);
+            updateStreamingAssistantRow(assistantBubble, fullContent, true);
             state.messages.push({ role: 'assistant', content: fullContent, model: 'oryqen-device-core' });
             saveCurrentConversationLocally();
           }
         } catch (infErr) {
+          removeElement(thinkingId);
           if (!fullContent) assistantBubble?.closest('.message-row')?.remove();
           appendMessageRow({ role: 'assistant', content: `⚠️ On-device inference: ${infErr.message}`, model: 'ORYQEN Local' });
         } finally {
+          removeElement(thinkingId);
           setGeneratingState(false);
           showTypingIndicator(false);
           state.abortController = null;
@@ -1550,7 +1556,7 @@ async function submitUserMessage(overrideQuery) {
         }
       } else {
         if (assistantBubble) {
-          updateStreamingAssistantRow(assistantBubble, fullContent);
+          updateStreamingAssistantRow(assistantBubble, fullContent, true);
         }
         state.messages.push({ role: 'assistant', content: fullContent, model: modelUsed });
         saveCurrentConversationLocally();
@@ -1782,7 +1788,13 @@ function createStreamingAssistantRow(modelName) {
       </svg>
     </div>
     <div class="message-content-wrap">
-      <div class="message-bubble"></div>
+      <div class="message-bubble streaming-placeholder">
+        <div class="typing-wave" title="ORYQEN is typing...">
+          <span class="wave-dot"></span>
+          <span class="wave-dot"></span>
+          <span class="wave-dot"></span>
+        </div>
+      </div>
       <div class="message-actions-bar">
         <span class="model-tag">${escapeHtml(brandedName)}</span>
       </div>
@@ -1793,10 +1805,25 @@ function createStreamingAssistantRow(modelName) {
   return row.querySelector('.message-bubble');
 }
 
-function updateStreamingAssistantRow(bubbleElement, rawText) {
-  if (bubbleElement) {
-    bubbleElement.innerHTML = formatMarkdown(rawText);
+function updateStreamingAssistantRow(bubbleElement, rawText, isFinal = false) {
+  if (!bubbleElement) return;
+  const clean = rawText ? rawText.trim() : '';
+  if (!clean) {
+    if (!bubbleElement.classList.contains('streaming-placeholder')) {
+      bubbleElement.classList.add('streaming-placeholder');
+      bubbleElement.innerHTML = `
+        <div class="typing-wave" title="ORYQEN is typing...">
+          <span class="wave-dot"></span>
+          <span class="wave-dot"></span>
+          <span class="wave-dot"></span>
+        </div>
+      `;
+    }
+    return;
   }
+  bubbleElement.classList.remove('streaming-placeholder');
+  const formatted = formatMarkdown(rawText);
+  bubbleElement.innerHTML = isFinal ? formatted : (formatted + '<span class="streaming-cursor-caret"></span>');
 }
 
 function appendThinkingRow(id, labelText) {

@@ -5650,3 +5650,41 @@ input:checked + .slider:before {
   gap: 6px;
 }
 
+/* --- Streaming Cursor and Typing Placeholder --- */
+.message-bubble.streaming-placeholder {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 16px;
+  min-height: 40px;
+}
+
+.message-bubble.streaming-placeholder .typing-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.message-bubble.streaming-placeholder .wave-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-primary, #6366f1);
+  animation: waveBounce 1.2s infinite ease-in-out both;
+}
+
+.streaming-cursor-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background-color: var(--accent-primary, #6366f1);
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  animation: cursorBlink 0.8s infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+
