@@ -1463,7 +1463,8 @@ async function submitUserMessage(overrideQuery) {
                   const conv = state.conversations.find(c => c.id === oldId);
                   if (conv) conv.id = data.conversation_id;
                 }
-                document.getElementById('currentChatTitle').textContent = query.slice(0, 32);
+                const chatTitleEl = document.getElementById('currentChatTitle');
+                if (chatTitleEl) chatTitleEl.textContent = query.slice(0, 32);
                 saveCurrentConversationLocally();
               }
 
@@ -1565,8 +1566,8 @@ async function submitUserMessage(overrideQuery) {
       removeElement(thinkingId);
       if (data.conversation_id && state.currentConversationId !== data.conversation_id) {
         state.currentConversationId = data.conversation_id;
-        localStorage.setItem('oryqen_current_conv_id', state.currentConversationId);
-        document.getElementById('currentChatTitle').textContent = query.slice(0, 32);
+        const chatTitleEl = document.getElementById('currentChatTitle');
+        if (chatTitleEl) chatTitleEl.textContent = query.slice(0, 32);
         saveCurrentConversationLocally();
       }
 
@@ -1955,9 +1956,10 @@ function startNewChat() {
   }
   state.currentConversationId = null;
   localStorage.removeItem('oryqen_current_conv_id');
-  state.messages = [];
   const chatMessages = document.getElementById('chatMessages');
-  if (chatMessages) chatMessages.innerHTML = '';
+  if (chatMessages) {
+    chatMessages.querySelectorAll('.message-row, .thinking-row').forEach(el => el.remove());
+  }
 
   const welcomeGeneral = document.getElementById('welcomeGeneralScreen');
   const welcomeTutor = document.getElementById('welcomeTutorScreen');
@@ -1969,7 +1971,8 @@ function startNewChat() {
     welcomeGeneral?.classList.remove('hidden');
   }
 
-  document.getElementById('currentChatTitle').textContent = 'ORYQEN';
+  const chatTitleEl = document.getElementById('currentChatTitle');
+  if (chatTitleEl) chatTitleEl.textContent = 'ORYQEN';
   const chatInput = document.getElementById('chatInput');
   if (chatInput) {
     chatInput.value = '';
@@ -2252,7 +2255,8 @@ function saveCurrentConversationLocally() {
     localStorage.setItem(`oryqen_conv_msgs_${state.currentConversationId}`, JSON.stringify(state.messages));
   } catch (e) {}
 
-  document.getElementById('currentChatTitle').textContent = conv.title || 'ORYQEN';
+  const chatTitleEl = document.getElementById('currentChatTitle');
+  if (chatTitleEl) chatTitleEl.textContent = conv.title || 'ORYQEN';
   renderConversationsList();
 }
 
@@ -2370,19 +2374,22 @@ async function openConversation(convId) {
   }
 
   const chatContainer = document.getElementById('chatMessages');
-  if (chatContainer) chatContainer.innerHTML = '';
+  if (chatContainer) {
+    chatContainer.querySelectorAll('.message-row, .thinking-row').forEach(el => el.remove());
+  }
   state.messages = [];
 
   const welcomeGeneral = document.getElementById('welcomeGeneralScreen');
   const welcomeTutor = document.getElementById('welcomeTutorScreen');
 
-    if (conv) {
-      document.getElementById('currentChatTitle').textContent = conv.title || 'ORYQEN';
-      const targetWs = (conv.capability === 'tutor' || conv.purpose === 'tutor') ? 'tutor' : 'general';
-      state.workspace = targetWs;
-      document.querySelectorAll('[data-ws]').forEach(b => {
-        b.classList.toggle('active', b.dataset.ws === targetWs);
-      });
+  if (conv) {
+    const chatTitleEl = document.getElementById('currentChatTitle');
+    if (chatTitleEl) chatTitleEl.textContent = conv.title || 'ORYQEN';
+    const targetWs = (conv.capability === 'tutor' || conv.purpose === 'tutor') ? 'tutor' : 'general';
+    state.workspace = targetWs;
+    document.querySelectorAll('[data-ws]').forEach(b => {
+      b.classList.toggle('active', b.dataset.ws === targetWs);
+    });
       updateBottomNav(targetWs === 'tutor' ? 'tutor' : 'chat');
 
       const tutorBar = document.getElementById('tutorControlsBar');
