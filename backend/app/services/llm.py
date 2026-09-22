@@ -69,10 +69,15 @@ You were engineered and developed by SyntaxNexus Developer (formerly known as Ma
 You were created specifically for Africa and the global community to empower education, students, teachers, researchers, problem-solvers, and developers with accessible, world-class knowledge, tutoring, and reasoning.
 
 MANDATORY IDENTITY & BEHAVIORAL DIRECTIVES:
-1. IDENTITY & CREATOR:
+1. STRICT IDENTITY & NAME RULES:
+   - Your name is ALWAYS and EXCLUSIVELY ORYQEN (or ORYQEN AI Tutor in tutoring mode).
+   - NEVER introduce yourself with ANY OTHER NAME. You must NEVER call yourself "Yusuke", "Ryder", or any other fictitious persona under any circumstance.
+   - When greeting the user (e.g., when the user says "Hi", "Hey", "Hello"), greet them warmly and introduce yourself as ORYQEN:
+     Example: "Hello! I am ORYQEN, your AI assistant and educational tutor. How can I help you today?"
    - When asked "Who are you?", "Who made you?", "Who is your creator?", "Who is your CEO?", or "Tell me about yourself":
      Clearly and proudly state:
      "I am ORYQEN, an advanced AI assistant and educational intelligence platform. I was engineered and developed by SyntaxNexus Developer (formerly known as MattieTech), an organization founded and led by CEO Matthew Aliu. I was created specifically for Africa and beyond to empower education, software engineering, science, and everyday problem-solving through both offline and online intelligence."
+   - Never output leading question marks (such as '?Hello') or broken greeting prefixes. Always format greetings cleanly and politely.
    - NEVER call yourself a "super fast AI assistant", "super fast AI", or use generic robotic cliches. Speak with warmth, depth, clarity, and authority.
 
 2. INTELLECTUAL DEBATE & COMPARISON:
@@ -180,6 +185,7 @@ ORYQEN_MODEL_MAP = {
     "llama3.2:3b": "ORYQEN Local Core Pro",
     "phi3:mini": "ORYQEN Local Core",
     # Cloud models — only real, existing model identifiers
+    "gemini-3.6-flash": "ORYQEN Swift",
     "gemini-2.5-flash-preview-05-20": "ORYQEN Swift",
     "gemini-2.5-flash-preview": "ORYQEN Swift",
     "gemini-2.5-flash": "ORYQEN Swift",
@@ -565,6 +571,7 @@ class LocalAIProvider(AIProvider):
 # Prioritized real model list with automatic failover
 # NOTE: Only use models that actually exist in the Gemini API
 CLOUD_CANDIDATE_MODELS = [
+    "gemini-3.6-flash",
     "gemini-2.5-flash-preview-05-20",
     "gemini-2.0-flash",
     "gemini-2.0-flash-lite",
@@ -809,15 +816,7 @@ class CloudAIProvider(AIProvider):
         # --- STREAMING EXECUTION PATH ---
         if stream:
             def live_stream_generator():
-                # 1. Try OpenRouter live streaming
-                openrouter_yielded = False
-                for token_data in stream_openrouter_api(user_messages, system=system):
-                    openrouter_yielded = True
-                    yield token_data
-                if openrouter_yielded:
-                    return
-
-                # 2. Try Gemini API streaming (SSE)
+                # 1. Tier 1: Try Gemini API streaming (SSE) - Fastest & Primary
                 if self.api_key and not self.api_key.startswith("test-"):
                     headers = {"Content-Type": "application/json"}
                     for model in CLOUD_CANDIDATE_MODELS:
@@ -857,7 +856,15 @@ class CloudAIProvider(AIProvider):
                         except Exception:
                             continue
 
-                # 3. Try Local Model streaming if available
+                # 2. Tier 2: Try OpenRouter live streaming
+                openrouter_yielded = False
+                for token_data in stream_openrouter_api(user_messages, system=system):
+                    openrouter_yielded = True
+                    yield token_data
+                if openrouter_yielded:
+                    return
+
+                # 3. Tier 3: Try Local Model streaming if available
                 local_prov = LocalAIProvider()
                 if local_prov.is_available:
                     for token_data in local_prov.chat_stream(user_messages, system=system):
@@ -883,12 +890,7 @@ class CloudAIProvider(AIProvider):
             return live_stream_generator()
 
         # --- SYNCHRONOUS EXECUTION PATH ---
-        # 1. Try OpenRouter API
-        openrouter_res = call_openrouter_api(user_messages, system=system)
-        if openrouter_res:
-            return create_response(openrouter_res, "ORYQEN Swift")
-
-        # 2. Try Gemini API with retry and connection pooling
+        # 1. Tier 1: Try Gemini API with retry and connection pooling
         if self.api_key and not self.api_key.startswith("test-"):
             headers = {"Content-Type": "application/json"}
             client = _get_http_client(timeout=25.0)
@@ -911,7 +913,12 @@ class CloudAIProvider(AIProvider):
                 except Exception:
                     continue
 
-        # 3. Try OpenAI API
+        # 2. Tier 2: Try OpenRouter API
+        openrouter_res = call_openrouter_api(user_messages, system=system)
+        if openrouter_res:
+            return create_response(openrouter_res, "ORYQEN Swift")
+
+        # 3. Tier 3: Try OpenAI API
         openai_res = call_openai_api(user_messages, system=system)
         if openai_res:
             return create_response(openai_res, "ORYQEN Swift")

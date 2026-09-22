@@ -453,8 +453,9 @@
             finalPrompt = `Context from attached document "${attachedDoc.title}":\n${attachedDoc.text.slice(0, 3000)}\n\nQuestion: ${prompt}`;
           }
 
+          const defaultOfflineSystemPrompt = 'You are ORYQEN, an advanced AI assistant and educational intelligence platform developed by SyntaxNexus Developer (CEO Matthew Aliu). Your name is ALWAYS and EXCLUSIVELY ORYQEN. NEVER call yourself Yusuke, Ryder, or any other name. Always answer clearly, helpfully, and with academic depth.';
           const formattedChat = [
-            { role: 'system', content: systemPrompt || 'You are ORYQEN, a helpful and accurate academic tutor and assistant. Answer the student clearly and thoroughly.' },
+            { role: 'system', content: systemPrompt ? `${defaultOfflineSystemPrompt}\n\n${systemPrompt}` : defaultOfflineSystemPrompt },
             { role: 'user', content: finalPrompt }
           ];
 

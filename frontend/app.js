@@ -1309,18 +1309,26 @@ async function submitUserMessage(overrideQuery) {
           }
         }
         const sysPrompt = (state.workspace === 'tutor'
-          ? `You are ORYQEN AI Tutor in ${state.tutorMode} mode for subject ${state.subject}. Level: ${state.tutorLevel}.`
-          : `You are ORYQEN, an advanced on-device academic and general intelligence AI assistant.`) + docContext;
+          ? `You are ORYQEN AI Tutor in ${state.tutorMode} mode for subject ${state.subject}. Level: ${state.tutorLevel}. Engineered by SyntaxNexus Developer (CEO Matthew Aliu). Your name is always exclusively ORYQEN. Never invent or use any other name.`
+          : `You are ORYQEN, an advanced on-device academic and general intelligence AI assistant engineered by SyntaxNexus Developer (CEO Matthew Aliu). Your name is always exclusively ORYQEN. Never invent or use any other name.`) + docContext;
 
         try {
           for await (const chunk of window.OfflineEngine.streamInference(query, sysPrompt, () => {})) {
             if (state.abortController?.signal?.aborted) break;
             fullContent += chunk.token;
-            updateStreamingAssistantRow(assistantBubble, fullContent);
+            const displayContent = fullContent.replace(/^[\s?¿!.,]+(?=[A-Za-z])/, '');
+            updateStreamingAssistantRow(assistantBubble, displayContent);
             scrollToBottom();
           }
-          state.messages.push({ role: 'assistant', content: fullContent, model: 'oryqen-device-core' });
+          fullContent = fullContent.replace(/^[\s?¿!.,]+(?=[A-Za-z])/, '').trim();
+          if (!fullContent) {
+            assistantBubble?.closest('.message-row')?.remove();
+          } else {
+            updateStreamingAssistantRow(assistantBubble, fullContent);
+            state.messages.push({ role: 'assistant', content: fullContent, model: 'oryqen-device-core' });
+          }
         } catch (infErr) {
+          if (!fullContent) assistantBubble?.closest('.message-row')?.remove();
           appendMessageRow({ role: 'assistant', content: `⚠️ On-device inference: ${infErr.message}`, model: 'ORYQEN Local' });
         } finally {
           setGeneratingState(false);
@@ -1403,13 +1411,19 @@ async function submitUserMessage(overrideQuery) {
         const { value, done } = await reader.read();
         if (done) break;
 
-        const text = decoder.decode(value, { stream: true });
-        const lines = text.split('\n');
+        streamBuffer += decoder.decode(value, { stream: true });
+        const lines = streamBuffer.split('\n');
+        // Keep trailing incomplete line in buffer
+        streamBuffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
+          const trimmed = line.trim();
+          if (trimmed === 'data: [DONE]') {
+            break;
+          }
+          if (trimmed.startsWith('data: ')) {
             try {
-              const data = JSON.parse(line.slice(6));
+              const data = JSON.parse(trimmed.slice(6));
               if (data.conversation_id && !state.currentConversationId) {
                 state.currentConversationId = data.conversation_id;
                 localStorage.setItem('oryqen_current_conv_id', state.currentConversationId);
@@ -1424,7 +1438,8 @@ async function submitUserMessage(overrideQuery) {
                 }
                 fullContent += data.chunk;
                 modelUsed = data.display_name || data.model || modelUsed || 'ORYQEN';
-                updateStreamingAssistantRow(assistantBubble, fullContent);
+                const displayContent = fullContent.replace(/^[\s?¿!.,]+(?=[A-Za-z])/, '');
+                updateStreamingAssistantRow(assistantBubble, displayContent);
                 scrollToBottom();
               }
             } catch (e) {}
@@ -1432,8 +1447,22 @@ async function submitUserMessage(overrideQuery) {
         }
       }
 
+      if (streamBuffer.trim().startsWith('data: ')) {
+        try {
+          const data = JSON.parse(streamBuffer.trim().slice(6));
+          if (data.chunk) {
+            fullContent += data.chunk;
+          }
+        } catch (e) {}
+      }
+
       removeElement(thinkingId);
+      fullContent = fullContent.replace(/^[\s?¿!.,]+(?=[A-Za-z])/, '').trim();
       if (!fullContent) {
+        if (assistantBubble) {
+          assistantBubble.closest('.message-row')?.remove();
+          assistantBubble = null;
+        }
         // Silent failover to on-device engine if model weights are present
         const installed = window.OfflineEngine?.getInstalledModelInfo?.();
         const isDownloaded = installed && (await window.OfflineEngine?.isModelDownloaded?.(installed.id));
@@ -1444,11 +1473,19 @@ async function submitUserMessage(overrideQuery) {
             for await (const chunk of window.OfflineEngine.streamInference(query, '', () => {})) {
               if (state.abortController?.signal?.aborted) break;
               localContent += chunk.token;
-              updateStreamingAssistantRow(assistantBubble, localContent);
+              const displayContent = localContent.replace(/^[\s?¿!.,]+(?=[A-Za-z])/, '');
+              updateStreamingAssistantRow(assistantBubble, displayContent);
               scrollToBottom();
             }
-            state.messages.push({ role: 'assistant', content: localContent, model: 'oryqen-device-core' });
+            localContent = localContent.replace(/^[\s?¿!.,]+(?=[A-Za-z])/, '').trim();
+            if (!localContent) {
+              assistantBubble.closest('.message-row')?.remove();
+            } else {
+              updateStreamingAssistantRow(assistantBubble, localContent);
+              state.messages.push({ role: 'assistant', content: localContent, model: 'oryqen-device-core' });
+            }
           } catch (e) {
+            assistantBubble.closest('.message-row')?.remove();
             appendMessageRow({
               role: 'assistant',
               content: 'I am temporarily unable to connect to the cloud servers. Please check your internet connection, or use the Offline Brain in Settings.',
@@ -1474,6 +1511,9 @@ async function submitUserMessage(overrideQuery) {
           });
         }
       } else {
+        if (assistantBubble) {
+          updateStreamingAssistantRow(assistantBubble, fullContent);
+        }
         state.messages.push({ role: 'assistant', content: fullContent, model: modelUsed });
       }
     } else {
