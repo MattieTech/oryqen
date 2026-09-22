@@ -1,6 +1,6 @@
 {
   "name": "oryqen-ai",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "ORYQEN — General AI & AI Tutor Platform with Offline Neural Capabilities",
   "private": true,
   "scripts": {

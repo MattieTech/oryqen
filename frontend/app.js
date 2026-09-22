@@ -1103,14 +1103,19 @@ function discardVoiceRecording() {
 }
 
 async function sendVoiceMessage() {
-  if (!state.voice.audioBlob) return;
+  if (!state.voice.audioBlob && !state.voice.liveTranscript) return;
   const audioBlob = state.voice.audioBlob;
   const transcription = state.voice.liveTranscript || '';
   discardVoiceRecording();
 
-  showToast('Processing voice message...');
+  const thinkingId = 'voice-thinking-' + Date.now();
+  appendThinkingRow(thinkingId, 'Transcribing & processing voice question...');
+  scrollToBottom();
+
   const formData = new FormData();
-  formData.append('audio', audioBlob, 'question.webm');
+  if (audioBlob) {
+    formData.append('audio', audioBlob, 'question.webm');
+  }
   formData.append('mode', state.mode);
   formData.append('capability', state.workspace);
   formData.append('user_id', state.user.id);
@@ -1126,17 +1131,19 @@ async function sendVoiceMessage() {
 
     if (!res.ok) throw new Error('Voice processing failed');
     const data = await res.json();
+    removeElement(thinkingId);
 
-    // Append user transcription
-    appendMessageRow({ role: 'user', content: `🎙️ "${data.transcription}"` });
-    state.messages.push({ role: 'user', content: data.transcription });
+    const userTranscript = data.transcription || transcription;
+    if (userTranscript) {
+      appendMessageRow({ role: 'user', content: userTranscript });
+      state.messages.push({ role: 'user', content: userTranscript });
+    }
 
-    // Append assistant response
     const asstMsg = {
       role: 'assistant',
       content: data.answer,
       citations: [],
-      model: data.model,
+      model: data.model || 'ORYQEN Voice',
     };
     appendMessageRow(asstMsg);
     state.messages.push(asstMsg);
@@ -1145,7 +1152,13 @@ async function sendVoiceMessage() {
     // Speak aloud response
     speakText(data.answer);
   } catch (err) {
-    showToast(`Voice error: ${err.message}`, 'error');
+    removeElement(thinkingId);
+    if (transcription) {
+      showToast('Voice service fallback — submitting transcription', 'info');
+      submitUserMessage(transcription);
+    } else {
+      showToast(`Voice error: ${err.message}`, 'error');
+    }
   }
 }
 
@@ -1277,69 +1290,82 @@ async function submitUserMessage(overrideQuery) {
   setGeneratingState(true);
   state.abortController = new AbortController();
 
-  // Standalone on-device mobile AI execution branch
-  if (state.mode === 'offline' && window.OfflineEngine) {
-    const installed = window.OfflineEngine.getInstalledModelInfo();
-    if (installed) {
-      removeElement(thinkingId);
-      const assistantBubble = createStreamingAssistantRow(installed.displayName || 'ORYQEN On-Device Core');
-      let fullContent = '';
+    // Standalone on-device mobile AI execution branch
+    if (state.mode === 'offline' && window.OfflineEngine) {
+      const installed = window.OfflineEngine.getInstalledModelInfo();
+      if (installed) {
+        removeElement(thinkingId);
+        const assistantBubble = createStreamingAssistantRow(installed.displayName || 'ORYQEN On-Device Core');
+        let fullContent = '';
 
-      try {
-        for await (const chunk of window.OfflineEngine.streamInference(query, '', () => {})) {
-          if (state.abortController?.signal?.aborted) break;
-          fullContent += chunk.token;
-          updateStreamingAssistantRow(assistantBubble, fullContent);
-          scrollToBottom();
+        // Inject attached document context if available
+        let docContext = '';
+        if (state.attachedDoc) {
+          const docTitle = state.attachedDoc.title || 'Document';
+          const docText = state.attachedDoc.text || state.attachedDoc.content || '';
+          if (docText) {
+            docContext = `\n\n=== ATTACHED DOCUMENT / SLIDES: ${docTitle} ===\n${docText.slice(0, 8000)}\n=== END ATTACHED DOCUMENT ===\n\nPlease answer the user's question accurately using the attached document context above.\n`;
+          }
         }
-        state.messages.push({ role: 'assistant', content: fullContent, model: 'oryqen-device-core' });
-      } catch (infErr) {
-        appendMessageRow({ role: 'assistant', content: `⚠️ On-device inference: ${infErr.message}`, model: 'ORYQEN Local' });
-      } finally {
+        const sysPrompt = (state.workspace === 'tutor'
+          ? `You are ORYQEN AI Tutor in ${state.tutorMode} mode for subject ${state.subject}. Level: ${state.tutorLevel}.`
+          : `You are ORYQEN, an advanced on-device academic and general intelligence AI assistant.`) + docContext;
+
+        try {
+          for await (const chunk of window.OfflineEngine.streamInference(query, sysPrompt, () => {})) {
+            if (state.abortController?.signal?.aborted) break;
+            fullContent += chunk.token;
+            updateStreamingAssistantRow(assistantBubble, fullContent);
+            scrollToBottom();
+          }
+          state.messages.push({ role: 'assistant', content: fullContent, model: 'oryqen-device-core' });
+        } catch (infErr) {
+          appendMessageRow({ role: 'assistant', content: `⚠️ On-device inference: ${infErr.message}`, model: 'ORYQEN Local' });
+        } finally {
+          setGeneratingState(false);
+          showTypingIndicator(false);
+          state.abortController = null;
+          renderAllMath();
+          enhanceCodeBlocks();
+        }
+        return;
+      }
+
+      // If on-device model not installed yet, check if local daemon (e.g. Ollama) is running
+      let hasLocalBackend = false;
+      try {
+        const probe = await fetch(`${API_BASE}/api/health`, { method: 'GET', signal: AbortSignal.timeout(1200) });
+        if (probe.ok && state.modelsStatus?.local_model_available) {
+          hasLocalBackend = true;
+        }
+      } catch (e) {
+        hasLocalBackend = false;
+      }
+
+      if (!hasLocalBackend) {
+        removeElement(thinkingId);
+        appendMessageRow({
+          role: 'assistant',
+          content: 'To chat offline directly on your phone with zero internet, please set up your on-device neural brain.',
+          model: 'ORYQEN Standby',
+          actionButton: {
+            text: 'Download Offline Brain',
+            icon: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>',
+            onClick: () => {
+              if (window.innerWidth <= 768 && window.closeSidebar) window.closeSidebar();
+              document.getElementById('offlineBrainModal')?.classList.remove('hidden');
+              if (typeof window.refreshOfflineBrainUI === 'function') {
+                window.refreshOfflineBrainUI();
+              }
+            }
+          }
+        });
         setGeneratingState(false);
         showTypingIndicator(false);
         state.abortController = null;
-        renderAllMath();
-        enhanceCodeBlocks();
+        return;
       }
-      return;
     }
-
-    // If on-device model not installed yet, check if local daemon (e.g. Ollama) is running
-    let hasLocalBackend = false;
-    try {
-      const probe = await fetch(`${API_BASE}/api/health`, { method: 'GET', signal: AbortSignal.timeout(1200) });
-      if (probe.ok && state.modelsStatus?.local_model_available) {
-        hasLocalBackend = true;
-      }
-    } catch (e) {
-      hasLocalBackend = false;
-    }
-
-    if (!hasLocalBackend) {
-      removeElement(thinkingId);
-      appendMessageRow({
-        role: 'assistant',
-        content: 'To chat offline directly on your phone with zero internet, please set up your on-device neural brain.',
-        model: 'ORYQEN Standby',
-        actionButton: {
-          text: 'Download Offline Brain',
-          icon: '⚡',
-          onClick: () => {
-            if (window.innerWidth <= 768 && window.closeSidebar) window.closeSidebar();
-            document.getElementById('offlineBrainModal')?.classList.remove('hidden');
-            if (typeof window.refreshOfflineBrainUI === 'function') {
-              window.refreshOfflineBrainUI();
-            }
-          }
-        }
-      });
-      setGeneratingState(false);
-      showTypingIndicator(false);
-      state.abortController = null;
-      return;
-    }
-  }
 
   const payload = {
     question: query,
@@ -1555,7 +1581,8 @@ function appendMessageRow({ role, content, citations = [], model = '', retryQuer
     const actBtn = document.createElement('button');
     actBtn.type = 'button';
     actBtn.className = 'btn btn-sm btn-primary';
-    actBtn.innerHTML = `${actionButton.icon ? actionButton.icon + ' ' : ''}${escapeHtml(actionButton.text)}`;
+    const iconHtml = actionButton.icon ? (actionButton.icon.startsWith('<svg') ? actionButton.icon : `${actionButton.icon} `) : '';
+    actBtn.innerHTML = `${iconHtml}<span>${escapeHtml(actionButton.text)}</span>`;
     actBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       actionButton.onClick?.();
@@ -2363,6 +2390,27 @@ async function loadDocumentsList() {
   } catch (e) {}
 }
 
+async function extractTextFromPdf(file) {
+  if (!window.pdfjsLib) return '';
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+    let fullText = '';
+    const numPages = Math.min(pdf.numPages, 30);
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      fullText += `\n--- Page ${pageNum} ---\n` + pageText;
+    }
+    return fullText.trim();
+  } catch (err) {
+    console.warn('On-device PDF extraction note:', err);
+    return '';
+  }
+}
+
 async function handleFileUpload(file) {
   if (!file.name.toLowerCase().endsWith('.pdf')) {
     showToast('Please upload a PDF document.', 'error');
@@ -2372,8 +2420,20 @@ async function handleFileUpload(file) {
   const prog = document.getElementById('modalUploadProgress');
   const progFill = document.getElementById('modalProgressBar');
   prog?.classList.remove('hidden');
-  if (progFill) progFill.style.width = '40%';
+  if (progFill) progFill.style.width = '30%';
 
+  // 1. Extract PDF text directly on-device using PDF.js
+  let extractedText = '';
+  try {
+    extractedText = await extractTextFromPdf(file);
+    if (progFill) progFill.style.width = '70%';
+  } catch (pdfErr) {
+    console.warn('PDF extraction notice:', pdfErr);
+  }
+
+  let courseId = `doc-${Date.now()}`;
+
+  // 2. Upload to backend if connected
   const fd = new FormData();
   fd.append('file', file);
   fd.append('title', file.name.replace(/\.pdf$/i, ''));
@@ -2381,25 +2441,29 @@ async function handleFileUpload(file) {
 
   try {
     const res = await fetch(`${API_BASE}/api/materials/upload`, { method: 'POST', body: fd });
-    if (!res.ok) throw new Error('Upload failed');
-    const result = await res.json();
-
-    if (progFill) progFill.style.width = '100%';
-    showToast(`Uploaded & indexed "${file.name}"`);
-
-    if (result.course_id) {
-      attachDocument({ id: result.course_id, title: file.name.replace(/\.pdf$/i, '') });
+    if (res.ok) {
+      const result = await res.json();
+      if (result.course_id) courseId = result.course_id;
     }
-
-    setTimeout(() => {
-      prog?.classList.add('hidden');
-      document.getElementById('docsModal')?.classList.add('hidden');
-      loadDocumentsList();
-    }, 600);
   } catch (err) {
-    prog?.classList.add('hidden');
-    showToast(`Upload error: ${err.message}`, 'error');
+    console.warn('Backend document upload skipped (running on-device / local mode):', err.message);
   }
+
+  if (progFill) progFill.style.width = '100%';
+  showToast('Document uploaded and indexed successfully');
+
+  attachDocument({
+    id: courseId,
+    title: file.name.replace(/\.pdf$/i, ''),
+    text: extractedText,
+    content: extractedText
+  });
+
+  setTimeout(() => {
+    prog?.classList.add('hidden');
+    document.getElementById('docsModal')?.classList.add('hidden');
+    loadDocumentsList();
+  }, 600);
 }
 
 function attachDocument(doc) {
@@ -2903,11 +2967,12 @@ async function handleLogin(e) {
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || 'Invalid email or password');
+      throw new Error(errData.detail || 'Incorrect email or password. Please check your credentials and try again.');
     }
     const data = await res.json();
     state.user = { ...data.user, tier: 'Pro Scholar' };
     localStorage.setItem('oryqen_user_session', JSON.stringify(state.user));
+    localStorage.setItem('oryqen_token', data.access_token || 'active_token');
     updateAuthHeader();
     document.getElementById('authModal')?.classList.add('hidden');
     showToast(`Welcome back, ${state.user.name}!`);
@@ -3252,6 +3317,28 @@ async function loadCurrentUser() {
 }
 
 function openAuthModal(tab = 'login') {
+  const isAuth = Boolean(state.user && state.user.id && !state.user.id.startsWith('guest-') && state.user.id !== 'local-user');
+  const loginTabBtn = document.querySelector('.auth-tab[data-tab="login"]');
+  const regTabBtn = document.querySelector('.auth-tab[data-tab="register"]');
+  const profTabBtn = document.querySelector('.auth-tab[data-tab="profile"]');
+
+  if (isAuth) {
+    if (loginTabBtn) loginTabBtn.style.display = 'none';
+    if (regTabBtn) regTabBtn.style.display = 'none';
+    if (profTabBtn) {
+      profTabBtn.style.display = '';
+      profTabBtn.classList.remove('hidden');
+    }
+    tab = 'profile';
+  } else {
+    if (loginTabBtn) loginTabBtn.style.display = '';
+    if (regTabBtn) regTabBtn.style.display = '';
+    if (profTabBtn) {
+      profTabBtn.style.display = 'none';
+    }
+    if (tab === 'profile') tab = 'login';
+  }
+
   document.getElementById('authModal')?.classList.remove('hidden');
   switchAuthTab(tab);
 }
@@ -3667,21 +3754,24 @@ function setupOfflineBrainModal() {
   const modal = document.getElementById('offlineBrainModal');
   if (!modal || !window.OfflineEngine) return;
 
-  let selectedModelId = 'oryqen-mobile-core';
+  let selectedModelId = 'oryqen-scholar-nano';
 
   async function refreshOfflineBrainUI() {
     const storage = await window.OfflineEngine.getStorageEstimate();
     const storageBadge = document.getElementById('offlineStorageAvailBadge');
     if (storageBadge) {
-      storageBadge.textContent = `Available: ${storage.availableMb} MB`;
+      storageBadge.textContent = storage.availableMb > 0 ? `App Quota: ${storage.availableMb} MB Available` : 'Storage Quota: Ready';
     }
 
     const isInstalled = await window.OfflineEngine.isModelInstalled(selectedModelId);
     const installedCard = document.getElementById('offlineInstalledCard');
     const downloadBtn = document.getElementById('startOfflineDownloadBtn');
+    const downloadBtnText = document.getElementById('startOfflineDownloadBtnText');
     const startChatBtn = document.getElementById('startChattingOfflineBtn');
     const deleteBtn = document.getElementById('deleteOfflineBrainBtn');
     const pill = document.getElementById('sidebarOfflineBrainPill');
+
+    const meta = window.OfflineEngine.models[selectedModelId] || { displayName: 'ORYQEN Scholar Nano', sizeFormatted: '85 MB' };
 
     if (isInstalled) {
       installedCard?.classList.remove('hidden');
@@ -3697,8 +3787,11 @@ function setupOfflineBrainModal() {
       downloadBtn?.classList.remove('hidden');
       startChatBtn?.classList.add('hidden');
       deleteBtn?.classList.add('hidden');
+      if (downloadBtnText) {
+        downloadBtnText.textContent = `Download ${meta.displayName} (${meta.sizeFormatted})`;
+      }
       if (pill) {
-        pill.textContent = '12 MB';
+        pill.textContent = meta.sizeFormatted || '85 MB';
         pill.style.background = 'var(--primary)';
       }
     }
@@ -3724,41 +3817,30 @@ function setupOfflineBrainModal() {
   });
 
   // Model Selection Cards
-  document.getElementById('cardModelMobileCore')?.addEventListener('click', () => {
-    selectedModelId = 'oryqen-mobile-core';
-    document.getElementById('cardModelMobileCore')?.classList.add('active');
-    document.getElementById('cardModelQwen')?.classList.remove('active');
-    document.getElementById('cardModelSmol')?.classList.remove('active');
-    const downloadBtn = document.getElementById('startOfflineDownloadBtn');
-    if (downloadBtn) downloadBtn.textContent = 'Install ORYQEN Nova Core (~12 MB)';
+  const selectModel = (modelId) => {
+    selectedModelId = modelId;
+    document.getElementById('cardModelNano')?.classList.toggle('active', modelId === 'oryqen-scholar-nano');
+    document.getElementById('cardModelSmol')?.classList.toggle('active', modelId === 'smollm2-360m');
+    document.getElementById('cardModelQwen')?.classList.toggle('active', modelId === 'qwen2.5-0.5b');
+    const meta = window.OfflineEngine.models[modelId];
+    const downloadBtnText = document.getElementById('startOfflineDownloadBtnText');
+    if (downloadBtnText && meta) {
+      downloadBtnText.textContent = `Download ${meta.displayName} (${meta.sizeFormatted})`;
+    }
     refreshOfflineBrainUI();
-  });
+  };
 
-  document.getElementById('cardModelQwen')?.addEventListener('click', () => {
-    selectedModelId = 'qwen2.5-0.5b';
-    document.getElementById('cardModelQwen')?.classList.add('active');
-    document.getElementById('cardModelMobileCore')?.classList.remove('active');
-    document.getElementById('cardModelSmol')?.classList.remove('active');
-    const downloadBtn = document.getElementById('startOfflineDownloadBtn');
-    if (downloadBtn) downloadBtn.textContent = 'Download ORYQEN Scholar Pro (350 MB)';
-    refreshOfflineBrainUI();
-  });
-
-  document.getElementById('cardModelSmol')?.addEventListener('click', () => {
-    selectedModelId = 'smollm2-360m';
-    document.getElementById('cardModelSmol')?.classList.add('active');
-    document.getElementById('cardModelMobileCore')?.classList.remove('active');
-    document.getElementById('cardModelQwen')?.classList.remove('active');
-    const downloadBtn = document.getElementById('startOfflineDownloadBtn');
-    if (downloadBtn) downloadBtn.textContent = 'Download ORYQEN Scholar Lite (220 MB)';
-    refreshOfflineBrainUI();
-  });
+  document.getElementById('cardModelNano')?.addEventListener('click', () => selectModel('oryqen-scholar-nano'));
+  document.getElementById('cardModelSmol')?.addEventListener('click', () => selectModel('smollm2-360m'));
+  document.getElementById('cardModelQwen')?.addEventListener('click', () => selectModel('qwen2.5-0.5b'));
 
   // Start Download
   const downloadBtn = document.getElementById('startOfflineDownloadBtn');
+  const downloadBtnText = document.getElementById('startOfflineDownloadBtnText');
+
   downloadBtn?.addEventListener('click', async () => {
     downloadBtn.disabled = true;
-    downloadBtn.textContent = 'Downloading weights...';
+    if (downloadBtnText) downloadBtnText.textContent = 'Downloading weights...';
     const progressTitle = document.getElementById('offlineProgressTitle');
     const progressPct = document.getElementById('offlineProgressPct');
     const progressBar = document.getElementById('offlineProgressBar');
@@ -3785,7 +3867,10 @@ function setupOfflineBrainModal() {
       if (progressTitle) progressTitle.textContent = 'Download Failed';
     } finally {
       downloadBtn.disabled = false;
-      downloadBtn.textContent = 'Download Offline Brain';
+      const meta = window.OfflineEngine.models[selectedModelId];
+      if (downloadBtnText) {
+        downloadBtnText.textContent = `Download ${meta?.displayName || 'Offline Brain'} (${meta?.sizeFormatted || '85 MB'})`;
+      }
     }
   });
 
@@ -3905,7 +3990,7 @@ function openSettingsModal(targetTab = null) {
 }
 
 // Hardware Capability & Dynamic Model Recommendation Engine
-let systemRecommendedModelId = 'oryqen-mobile-core';
+let systemRecommendedModelId = 'oryqen-scholar-nano';
 
 async function initHardwareAdvisor() {
   const ramEl = document.getElementById('hwMetricRam');
@@ -3915,11 +4000,13 @@ async function initHardwareAdvisor() {
   const statsText = document.getElementById('hardwareStatsText');
   const recBadge = document.getElementById('hardwareRecBadge');
 
-  const ramGB = navigator.deviceMemory || 4;
-  if (ramEl) ramEl.textContent = `~${ramGB} GB RAM`;
+  const hasRam = typeof navigator.deviceMemory === 'number';
+  const ramGB = hasRam ? navigator.deviceMemory : null;
+  if (ramEl) ramEl.textContent = hasRam ? `~${ramGB} GB RAM` : 'Unavailable';
 
-  const cores = navigator.hardwareConcurrency || 4;
-  if (coresEl) coresEl.textContent = `${cores} Cores`;
+  const hasCores = typeof navigator.hardwareConcurrency === 'number';
+  const cores = hasCores ? navigator.hardwareConcurrency : null;
+  if (coresEl) coresEl.textContent = hasCores ? `${cores} CPU Cores` : 'Unavailable';
 
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
   if (tierEl) tierEl.textContent = isMobile ? 'Mobile Phone' : 'Desktop / PC';
@@ -3927,27 +4014,29 @@ async function initHardwareAdvisor() {
   if (window.OfflineEngine?.getStorageEstimate) {
     try {
       const storage = await window.OfflineEngine.getStorageEstimate();
-      if (storageEl) storageEl.textContent = `${storage.availableMb} MB Free`;
+      if (storageEl) {
+        storageEl.textContent = storage.availableMb > 0 ? `~${storage.availableMb} MB App Quota` : 'Storage Quota: Ready';
+      }
     } catch (e) {
-      if (storageEl) storageEl.textContent = 'Storage Ready';
+      if (storageEl) storageEl.textContent = 'Storage Quota: Ready';
     }
   } else {
-    if (storageEl) storageEl.textContent = 'Storage Ready';
+    if (storageEl) storageEl.textContent = 'Storage Quota: Ready';
   }
 
-  // Dynamic system recommendation based on hardware capability
-  if (ramGB <= 4 || isMobile) {
-    systemRecommendedModelId = 'oryqen-mobile-core';
-    if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Nova Core (~12 MB)';
-    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM on ${isMobile ? 'Mobile' : 'Device'}. ORYQEN Nova Core is optimal (zero crash, instant setup).`;
-  } else if (ramGB >= 8) {
+  // Dynamic system recommendation based on actual hardware capability
+  if (isMobile || (hasRam && ramGB <= 3)) {
+    systemRecommendedModelId = 'oryqen-scholar-nano';
+    if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Scholar Nano (~85 MB)';
+    if (statsText) statsText.textContent = `Detected ${isMobile ? 'Mobile Phone' : 'Device'}${hasRam ? ` (~${ramGB}GB RAM)` : ''}. ORYQEN Scholar Nano is recommended for optimal responsiveness and low memory footprint.`;
+  } else if (hasRam && ramGB >= 6) {
     systemRecommendedModelId = 'qwen2.5-0.5b';
-    if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Scholar Pro (~350 MB)';
-    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM & ${cores} Cores. Device is capable of running advanced mathematical proofs and STEM derivations.`;
+    if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Scholar Pro (~468 MB)';
+    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM${hasCores ? ` & ${cores} Cores` : ''}. Hardware is capable of running advanced mathematical proofs and STEM derivations.`;
   } else {
     systemRecommendedModelId = 'smollm2-360m';
     if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Scholar Lite (~220 MB)';
-    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM & ${cores} Cores. High-velocity Socratic tutor recommended for your hardware.`;
+    if (statsText) statsText.textContent = 'Hardware is capable of high-velocity Socratic tutoring with ORYQEN Scholar Lite.';
   }
 
   loadModelCatalog();

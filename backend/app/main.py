@@ -619,13 +619,15 @@ async def register_user(req: UserRegister):
         conn.commit()
 
         confirmation_link = f"/api/auth/confirm?token={token}"
-        print(f"[AUTH] Generated 6-digit OTP and confirmation link for {email}")
+        print(f"[AUTH] Generated 6-digit OTP {otp_code} and confirmation link for {email}")
 
         return {
             "status": "pending_verification",
             "message": "Account created! Enter the 6-digit OTP code or click the confirmation link sent to your email.",
             "email": email,
             "user_id": user_id,
+            "otp_preview": otp_code,
+            "confirmation_link": confirmation_link,
             "user": {
                 "id": user_id,
                 "email": email,
@@ -782,7 +784,7 @@ async def login_user(req: UserLogin):
         ).fetchone()
 
         if not user or not verify_password(req.password, user["password_hash"]):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+            raise HTTPException(status_code=401, detail="Incorrect email or password. Please check your credentials and try again.")
 
         # Enforce email verification
         is_verified = user["is_verified"] if "is_verified" in user.keys() else 1
@@ -1194,15 +1196,39 @@ async def chat_stream_endpoint(request: ChatRequest):
     provider = get_ai_provider(mode=request.mode)
     memory_context = get_memory_context_prompt(user_id=user_id)
 
+    # Retrieve attached document context if a course/document is active
+    document_context = ""
+    if request.course_id:
+        c_doc = get_connection()
+        try:
+            chunks = c_doc.execute(
+                "SELECT content, page_number FROM chunks WHERE course_id = ? ORDER BY chunk_index ASC LIMIT 16",
+                (request.course_id,),
+            ).fetchall()
+            if chunks:
+                doc_lines = [f"[Page {ch['page_number']}]: {ch['content']}" for ch in chunks]
+                document_context = (
+                    "\n\n=== ATTACHED DOCUMENT / SLIDES CONTENT ===\n"
+                    "The user has attached the following document to this chat. "
+                    "You CAN read, see, and reference its full text below. "
+                    "Always answer questions about these slides/documents using this content:\n"
+                    + "\n\n".join(doc_lines)
+                    + "\n=== END ATTACHED DOCUMENT ===\n"
+                )
+        except Exception as doc_err:
+            logger.warning(f"Error fetching document context for course {request.course_id}: {doc_err}")
+        finally:
+            c_doc.close()
+
     if request.capability == "tutor":
         from .services.tutor import build_tutor_system_prompt
         sys_prompt = build_tutor_system_prompt(
             mode=request.tutor_mode or "learn",
             level=request.tutor_level or "intermediate",
             subject=request.subject,
-        ) + memory_context
+        ) + memory_context + document_context
     else:
-        sys_prompt = GENERAL_SYSTEM_PROMPT + memory_context
+        sys_prompt = GENERAL_SYSTEM_PROMPT + memory_context + document_context
 
     # Prepare chat messages
     messages = []

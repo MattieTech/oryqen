@@ -185,13 +185,13 @@
             <span class="pill-indicator" id="sidebarOfflineBrainPill" style="background:var(--primary); color:#fff;">350 MB</span>
           </button>
 
-          <a href="https://github.com/MattieTech/oryqen/releases/latest/download/oryqen-v2.0-offline.apk" class="sub-link-btn" id="sidebarDownloadApkBtn" title="Download Official Android APK" download style="text-decoration:none;">
+          <a href="https://github.com/MattieTech/oryqen/releases/latest/download/oryqen-v1.0.0.apk" class="sub-link-btn" id="sidebarDownloadApkBtn" title="Download Official Android APK" download style="text-decoration:none;">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
               <line x1="12" y1="18" x2="12.01" y2="18"></line>
             </svg>
             <span>Android APK</span>
-            <span class="pill-indicator" style="background:#10b981; color:#fff;">v2.0</span>
+            <span class="pill-indicator" style="background:#10b981; color:#fff;">v1.0.0</span>
           </a>
 
         </div>
@@ -1750,22 +1750,13 @@
         <div class="model-select-group">
           <label class="control-label">Select On-Device Model Architecture</label>
           <div class="offline-models-grid">
-            <div class="offline-model-card active" data-offline-model="oryqen-mobile-core" id="cardModelMobileCore">
+            <div class="offline-model-card active" data-offline-model="oryqen-scholar-nano" id="cardModelNano">
               <div class="offline-card-top">
-                <span class="offline-card-title">ORYQEN Nova Core</span>
-                <span class="offline-card-pill">Recommended • Instant (~12 MB)</span>
+                <span class="offline-card-title">ORYQEN Scholar Nano</span>
+                <span class="offline-card-pill">Recommended for Mobile • ~85 MB</span>
               </div>
-              <p class="offline-card-desc">Zero-crash on-device neural core tuned for all smartphones (Infinix, Tecno, Samsung). High-speed reasoning with zero internet.</p>
-              <div class="offline-card-specs">Tuned: Mobile CPU/GPU • Latency: &lt; 30ms • Size: 12 MB</div>
-            </div>
-
-            <div class="offline-model-card" data-offline-model="qwen2.5-0.5b" id="cardModelQwen">
-              <div class="offline-card-top">
-                <span class="offline-card-title">ORYQEN Scholar Pro</span>
-                <span class="offline-card-pill">STEM & Math Reasoning • ~350 MB</span>
-              </div>
-              <p class="offline-card-desc">Advanced STEM problem solving, university-level calculus, mathematical proofs, and academic derivations.</p>
-              <div class="offline-card-specs">Tuned: STEM Proofs • Latency: ~120ms • Format: Adaptive Neural</div>
+              <p class="offline-card-desc">Ultra-fast on-device neural core optimized for budget & midrange smartphones (2GB–3GB RAM). Low memory footprint, zero lag.</p>
+              <div class="offline-card-specs">Tuned: Mobile CPU/WASM • Latency: &lt; 45ms • Size: 85 MB</div>
             </div>
 
             <div class="offline-model-card" data-offline-model="smollm2-360m" id="cardModelSmol">
@@ -1773,8 +1764,17 @@
                 <span class="offline-card-title">ORYQEN Scholar Lite</span>
                 <span class="offline-card-pill">Fast Socratic Tutor • ~220 MB</span>
               </div>
-              <p class="offline-card-desc">High-velocity conceptual tutoring, step-by-step logic, and rapid Socratic dialogue for budget smartphones.</p>
-              <div class="offline-card-specs">Tuned: Socratic Dialogue • Latency: &lt; 85ms • Format: Adaptive Neural</div>
+              <p class="offline-card-desc">High-velocity conceptual tutoring, step-by-step logic, and rapid Socratic dialogue for smartphones with 3GB+ RAM.</p>
+              <div class="offline-card-specs">Tuned: Socratic Dialogue • Latency: &lt; 85ms • Format: Q4_K_M GGUF</div>
+            </div>
+
+            <div class="offline-model-card" data-offline-model="qwen2.5-0.5b" id="cardModelQwen">
+              <div class="offline-card-top">
+                <span class="offline-card-title">ORYQEN Scholar Pro</span>
+                <span class="offline-card-pill">STEM & Math Reasoning • ~468 MB</span>
+              </div>
+              <p class="offline-card-desc">Deep mathematical derivations, university-level problem solving, and multilingual STEM reasoning for phones with 4GB+ RAM.</p>
+              <div class="offline-card-specs">Tuned: STEM Proofs • Latency: ~120ms • Format: Q4_K_M GGUF</div>
             </div>
           </div>
         </div>
@@ -1789,7 +1789,7 @@
             <div class="progress-bar-fill" id="offlineProgressBar" style="width: 0%;"></div>
           </div>
           <div class="offline-status-meta">
-            <span id="offlineProgressTransferred">0 MB / 350 MB</span>
+            <span id="offlineProgressTransferred">0 MB / 85 MB</span>
             <span id="offlineProgressSpeed">Speed: --</span>
           </div>
         </div>
@@ -1808,12 +1808,19 @@
         </div>
       </div>
 
-      <div class="modal-footer">
+      <div class="modal-footer offline-modal-footer">
         <button type="button" class="btn btn-ghost text-danger hidden" id="deleteOfflineBrainBtn">Delete Model Weights</button>
-        <div class="footer-actions-right">
-          <button type="button" class="btn btn-secondary" id="closeOfflineBrainActionBtn">Close</button>
-          <button type="button" class="btn btn-primary" id="startOfflineDownloadBtn">Download Offline Brain (350 MB)</button>
+        <div class="footer-actions-right offline-actions-group">
+          <button type="button" class="btn btn-primary btn-download-action" id="startOfflineDownloadBtn">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span id="startOfflineDownloadBtnText">Download Offline Brain (~85 MB)</span>
+          </button>
           <button type="button" class="btn btn-success hidden" id="startChattingOfflineBtn">Start Chatting Offline</button>
+          <button type="button" class="btn btn-secondary" id="closeOfflineBrainActionBtn">Close</button>
         </div>
       </div>
     </div>
@@ -1822,6 +1829,13 @@
   <!-- Toast Shelf -->
   <div class="toast-shelf" id="toastShelf"></div>
 
+  <script src="math.min.js"></script>
+  <script src="pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
+    }
+  </script>
   <script src="offline-engine.js"></script>
   <script src="app.js"></script>
 </body>

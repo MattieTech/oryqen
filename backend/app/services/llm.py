@@ -85,6 +85,8 @@ GENERAL_SYSTEM_PROMPT = f"""{IDENTITY_CORE}
 You excel at answering general questions, writing, software engineering, scientific reasoning, mathematics, creative exploration, intellectual debate, and everyday problem solving.
 When a user asks an educational or academic question, adapt seamlessly to become a patient and thorough tutor: explain concepts step-by-step, use analogies, and encourage deeper understanding.
 Always provide structured, clear, and well-reasoned answers. Use markdown formatting with clear headings, lists, and code blocks where helpful.
+
+COMPLETION & LENGTH DIRECTIVE: Always provide complete, self-contained answers that naturally reach a conclusive ending without abruptly stopping mid-sentence or mid-topic. For concise questions, keep answers direct and focused. For broad, comprehensive, or historical questions (e.g. History of Nigeria, in-depth essays, detailed explanations), deliver a thorough, well-structured, and fully finished overview so the user never has to prompt 'continue'.
 """
 
 TUTOR_SYSTEM_PROMPT = f"""{IDENTITY_CORE}
@@ -613,7 +615,7 @@ def call_openrouter_api(messages: list[dict], system: str = "", temperature: flo
                         "model": m,
                         "messages": payload_messages,
                         "temperature": temperature,
-                        "max_tokens": 1024,
+                        "max_tokens": 3072,
                     },
                 )
             t0 = time.time()
@@ -661,7 +663,7 @@ def stream_openrouter_api(messages: list[dict], system: str = "", temperature: f
                         "model": c,
                         "messages": payload_messages,
                         "temperature": temperature,
-                        "max_tokens": 1024,
+                        "max_tokens": 3072,
                         "stream": True,
                     }
                 ) as response:
@@ -751,7 +753,7 @@ class CloudAIProvider(AIProvider):
     def _build_gemini_payload(self, contents: list, system: str = "", temperature: float = 0.7) -> dict:
         payload = {
             "contents": contents,
-            "generationConfig": {"temperature": temperature, "maxOutputTokens": 2048}
+            "generationConfig": {"temperature": temperature, "maxOutputTokens": 3072}
         }
         if system:
             payload["system_instruction"] = {"parts": [{"text": system}]}

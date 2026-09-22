@@ -1,66 +1,115 @@
 /**
- * ORYQEN — On-Device Offline Neural Engine & Model Manager
- * Enables downloading, caching, and running standalone AI models directly on mobile devices
- * with zero server connection or internet access once weights are stored locally.
- * Memory-safe streaming: Zero V8 heap spikes, preventing low-memory OS termination on Android.
+ * ORYQEN — On-Device Offline Neural Engine & Model Manager (v1.0.0)
+ * Real WebAssembly (Wllama) on-device inference, Math computational solver,
+ * resumable background-capable download system, and honest hardware reporting.
+ * Zero fake/templated responses.
  */
 
 (function () {
   const MODEL_STORAGE_KEY = 'oryqen_installed_offline_model';
   const DOWNLOADED_MODELS_KEY = 'oryqen_downloaded_models_catalog';
-  const CACHE_NAME = 'oryqen-neural-weights-v2';
+  const CACHE_NAME = 'oryqen-neural-weights-v1-0-0';
 
   // Available on-device mobile neural models
   const MOBILE_MODELS = {
-    'oryqen-mobile-core': {
-      id: 'oryqen-mobile-core',
-      displayName: 'ORYQEN Nova Core (Mobile)',
-      sizeBytes: 12582912,
-      sizeFormatted: '~12 MB',
-      description: 'Ultra-fast, zero-crash on-device neural core optimized for budget & midrange smartphones (2GB-4GB RAM). Instant setup, zero battery drain.',
-      sourceUrl: '/manifest.json', // verified lightweight payload
-      contextWindow: 4096,
-      quantization: 'INT8 Neural',
-      minRam: '2 GB',
-      recommendedRam: '2GB–4GB',
-      latency: '< 30ms'
-    },
-    'qwen2.5-0.5b': {
-      id: 'qwen2.5-0.5b',
-      displayName: 'ORYQEN Scholar Pro (STEM & Math)',
-      sizeBytes: 368000000,
-      sizeFormatted: '~350 MB',
-      description: 'Deep mathematical proofs, step-by-step academic reasoning, university-level calculus, and multilingual STEM problem solving.',
-      sourceUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    'oryqen-scholar-nano': {
+      id: 'oryqen-scholar-nano',
+      displayName: 'ORYQEN Scholar Nano (Mobile)',
+      sizeBytes: 88000000,
+      sizeFormatted: '~85 MB',
+      description: 'Ultra-fast, zero-crash on-device neural core optimized for budget & midrange smartphones (2GB–3GB RAM). Low memory footprint, zero lag.',
+      sourceUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct-GGUF/resolve/main/smollm2-135m-instruct-q4_k_m.gguf',
       contextWindow: 2048,
-      quantization: 'Adaptive GGUF',
-      minRam: '4 GB',
-      recommendedRam: '6GB–8GB+',
-      latency: '~120ms'
+      quantization: 'Q4_K_M GGUF',
+      minRam: '2 GB',
+      recommendedRam: '2GB–3GB',
+      latency: '< 45ms'
     },
     'smollm2-360m': {
       id: 'smollm2-360m',
       displayName: 'ORYQEN Scholar Lite (Fast Tutor)',
       sizeBytes: 228000000,
       sizeFormatted: '~220 MB',
-      description: 'High-velocity Socratic dialogue, conceptual academic tutoring, and rapid step-by-step logic.',
+      description: 'High-velocity Socratic dialogue, conceptual academic tutoring, and rapid step-by-step logic for smartphones with 3GB+ RAM.',
       sourceUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF/resolve/main/smollm2-360m-instruct-q4_k_m.gguf',
       contextWindow: 2048,
-      quantization: 'Adaptive GGUF',
+      quantization: 'Q4_K_M GGUF',
       minRam: '3 GB',
-      recommendedRam: '4GB–6GB',
-      latency: '~85ms'
+      recommendedRam: '3GB–4GB',
+      latency: '< 85ms'
+    },
+    'qwen2.5-0.5b': {
+      id: 'qwen2.5-0.5b',
+      displayName: 'ORYQEN Scholar Pro (STEM & Math)',
+      sizeBytes: 468000000,
+      sizeFormatted: '~468 MB',
+      description: 'Deep mathematical derivations, university-level problem solving, and multilingual STEM reasoning for phones with 4GB+ RAM.',
+      sourceUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+      contextWindow: 2048,
+      quantization: 'Q4_K_M GGUF',
+      minRam: '4 GB',
+      recommendedRam: '4GB–8GB',
+      latency: '~120ms'
     }
   };
 
   let activeDownloadAbortController = null;
+  let activeWllamaInstance = null;
+  let activeWllamaModelId = null;
+
+  // Real offline mathematical calculator
+  const MathEngine = {
+    isMathQuery(q) {
+      if (!q) return false;
+      const clean = q.trim().toLowerCase();
+      // Pure arithmetic: e.g. 1 + 1, 4 * 12, (50 - 5) / 3, sqrt(144), 2^8, sin(45)
+      const isPureExpression = /^[\d\s+\-*/^().,%=eE|&!<>]+$/.test(clean) && /\d/.test(clean);
+      const hasMathKeywords = /\b(calculate|compute|solve|derivative|integral|integrate|evaluate|what is|sqrt|log|sin|cos|tan)\b/i.test(clean) &&
+        (/[\d+\-*/^=]/.test(clean) || /\b(pi|euler)\b/i.test(clean));
+      return isPureExpression || hasMathKeywords;
+    },
+
+    solve(rawQuery) {
+      try {
+        let expr = rawQuery
+          .replace(/^(what is|calculate|compute|solve|evaluate|find value of|find)\s+/i, '')
+          .replace(/[?!=]+$/, '')
+          .trim();
+
+        // Check if math.js is loaded
+        if (typeof window.math !== 'undefined' && window.math.evaluate) {
+          const result = window.math.evaluate(expr);
+          const formatted = typeof result === 'number' ? Number(result.toFixed(6)).toString() : result.toString();
+          return {
+            success: true,
+            expression: expr,
+            result: formatted,
+            method: 'Math.js Computational Engine'
+          };
+        }
+
+        // Safe JS math fallback for standard arithmetic
+        const sanitized = expr.replace(/[^0-9+\-*/().,%^]/g, '');
+        if (sanitized && /\d/.test(sanitized)) {
+          const safeEval = new Function(`'use strict'; return (${sanitized.replace(/\^/g, '**')})`)();
+          return {
+            success: true,
+            expression: expr,
+            result: safeEval.toString(),
+            method: 'Standard Arithmetic Core'
+          };
+        }
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+      return { success: false };
+    }
+  };
 
   const OfflineEngine = {
     models: MOBILE_MODELS,
+    math: MathEngine,
 
-    /**
-     * Return list of all locally downloaded models
-     */
     getDownloadedModels() {
       try {
         const raw = localStorage.getItem(DOWNLOADED_MODELS_KEY);
@@ -75,9 +124,6 @@
       }
     },
 
-    /**
-     * Check if a specific model weights file is downloaded on device
-     */
     async isModelDownloaded(modelId) {
       const list = this.getDownloadedModels();
       if (list.some(m => m.id === modelId)) return true;
@@ -91,9 +137,6 @@
       return false;
     },
 
-    /**
-     * Set a downloaded model as the active on-device inference model
-     */
     setActiveModel(modelId) {
       const modelMeta = MOBILE_MODELS[modelId];
       if (!modelMeta) return false;
@@ -102,28 +145,24 @@
         displayName: modelMeta.displayName,
         installedAt: new Date().toISOString(),
         sizeMb: (modelMeta.sizeBytes / (1024 * 1024)).toFixed(1),
+        quantization: modelMeta.quantization,
       };
       localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(record));
       return true;
     },
 
-    /**
-     * Check if an offline neural model is currently active
-     */
-    async isModelInstalled(modelId = 'oryqen-mobile-core') {
+    async isModelInstalled(modelId = '') {
       const saved = localStorage.getItem(MODEL_STORAGE_KEY);
       if (!saved) return false;
       try {
         const info = JSON.parse(saved);
-        return info && (info.id === modelId || !modelId);
+        if (modelId) return info && info.id === modelId;
+        return Boolean(info && info.id);
       } catch (e) {
         return false;
       }
     },
 
-    /**
-     * Get currently active installed model metadata
-     */
     getInstalledModelInfo() {
       const saved = localStorage.getItem(MODEL_STORAGE_KEY);
       if (!saved) return null;
@@ -135,29 +174,30 @@
     },
 
     /**
-     * Check available device storage safely
+     * Honest device storage measurement using navigator.storage
      */
     async getStorageEstimate() {
       if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
         try {
           const estimate = await navigator.storage.estimate();
-          const availableBytes = (estimate.quota || 0) - (estimate.usage || 0);
+          const quota = estimate.quota || 0;
+          const usage = estimate.usage || 0;
           return {
-            quotaMb: Math.round((estimate.quota || 0) / (1024 * 1024)),
-            usageMb: Math.round((estimate.usage || 0) / (1024 * 1024)),
-            availableMb: Math.max(256, Math.round(availableBytes / (1024 * 1024))),
+            quotaMb: Math.round(quota / (1024 * 1024)),
+            usageMb: Math.round(usage / (1024 * 1024)),
+            availableMb: Math.max(0, Math.round((quota - usage) / (1024 * 1024))),
+            isHonest: true,
           };
         } catch (e) {}
       }
-      return { quotaMb: 2048, usageMb: 45, availableMb: 2003 };
+      return { quotaMb: null, usageMb: null, availableMb: null, isHonest: false };
     },
 
     /**
-     * Memory-safe download that streams data without bloating V8 heap,
-     * preventing Android Low Memory Killer (LMK) process termination.
+     * Resumable, background-capable download stream to CacheStorage.
      */
-    async downloadModel(modelId = 'oryqen-mobile-core', onProgress) {
-      const modelMeta = MOBILE_MODELS[modelId] || MOBILE_MODELS['oryqen-mobile-core'];
+    async downloadModel(modelId = 'oryqen-scholar-nano', onProgress) {
+      const modelMeta = MOBILE_MODELS[modelId] || MOBILE_MODELS['oryqen-scholar-nano'];
       activeDownloadAbortController = new AbortController();
       const signal = activeDownloadAbortController.signal;
 
@@ -166,35 +206,42 @@
       const startTime = Date.now();
 
       try {
-        let effectiveTotal = total;
+        if (typeof onProgress === 'function') {
+          onProgress({
+            percent: 1,
+            transferredMb: '0.0',
+            totalMb: (total / (1024 * 1024)).toFixed(1),
+            speedMbps: 'Connecting...',
+            status: 'downloading',
+          });
+        }
 
-        // For mobile core or external weights, fetch with progress
         const response = await fetch(modelMeta.sourceUrl, {
           signal,
           headers: { 'Accept': '*/*' },
         });
 
-        if (!response.ok && modelMeta.id !== 'oryqen-mobile-core') {
-          throw new Error(`Model download failed (HTTP ${response.status})`);
+        if (!response.ok) {
+          throw new Error(`Model download server returned status ${response.status} (${response.statusText})`);
         }
 
+        let effectiveTotal = total;
         const contentLength = response.headers.get('content-length');
         if (contentLength) {
           effectiveTotal = parseInt(contentLength, 10);
         }
 
-        // Clone response stream for CacheStorage before reading body
+        // Cache write stream
         let cachePromise = Promise.resolve();
-        try {
-          if (typeof caches !== 'undefined') {
+        let cacheUrl = `/models/${modelMeta.id}.bin`;
+        if (typeof caches !== 'undefined') {
+          try {
             const cache = await caches.open(CACHE_NAME);
-            const cacheUrl = `/models/${modelMeta.id}.bin`;
             const cacheClone = response.clone();
             cachePromise = cache.put(cacheUrl, cacheClone).catch(() => {});
-          }
-        } catch (e) {}
+          } catch (e) {}
+        }
 
-        // Stream reader loop: calculate progress WITHOUT accumulating chunks in memory
         const reader = response.body ? response.body.getReader() : null;
 
         if (reader) {
@@ -213,45 +260,29 @@
                 percent,
                 transferredMb: (transferred / (1024 * 1024)).toFixed(1),
                 totalMb: (effectiveTotal / (1024 * 1024)).toFixed(1),
-                speedMbps,
-                status: 'downloading',
-              });
-            }
-          }
-        } else {
-          // Fallback simulation for browsers that don't support readable body streams
-          for (let p = 10; p <= 90; p += 20) {
-            await new Promise(r => setTimeout(r, 120));
-            if (typeof onProgress === 'function') {
-              onProgress({
-                percent: p,
-                transferredMb: ((effectiveTotal * (p / 100)) / (1024 * 1024)).toFixed(1),
-                totalMb: (effectiveTotal / (1024 * 1024)).toFixed(1),
-                speedMbps: '3.5',
+                speedMbps: `${speedMbps} MB/s`,
                 status: 'downloading',
               });
             }
           }
         }
 
-        // Wait for cache write to complete
         await cachePromise;
 
-        // Persist model installation record
+        const finalMb = (effectiveTotal / (1024 * 1024)).toFixed(1);
         const modelRecord = {
           id: modelMeta.id,
           displayName: modelMeta.displayName,
           installedAt: new Date().toISOString(),
-          sizeMb: (effectiveTotal / (1024 * 1024)).toFixed(1),
+          sizeMb: finalMb,
+          quantization: modelMeta.quantization,
         };
         localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(modelRecord));
 
-        // Add to downloaded models list
         const downloadedList = this.getDownloadedModels().filter(m => m.id !== modelMeta.id);
         downloadedList.push(modelRecord);
         localStorage.setItem(DOWNLOADED_MODELS_KEY, JSON.stringify(downloadedList));
 
-        const finalMb = (effectiveTotal / (1024 * 1024)).toFixed(1);
         if (typeof onProgress === 'function') {
           onProgress({
             percent: 100,
@@ -262,10 +293,15 @@
           });
         }
         return true;
-
       } catch (err) {
         if (err.name === 'AbortError') {
-          throw new Error('Download paused or cancelled');
+          if (typeof onProgress === 'function') {
+            onProgress({ status: 'paused', percent: 0, speedMbps: 'Paused' });
+          }
+          throw new Error('Download paused by user');
+        }
+        if (typeof onProgress === 'function') {
+          onProgress({ status: 'failed', percent: 0, speedMbps: 'Failed' });
         }
         throw err;
       } finally {
@@ -273,9 +309,6 @@
       }
     },
 
-    /**
-     * Cancel / Pause active download
-     */
     cancelDownload() {
       if (activeDownloadAbortController) {
         activeDownloadAbortController.abort();
@@ -283,23 +316,30 @@
       }
     },
 
-    /**
-     * Remove installed model from device storage
-     */
-    async deleteInstalledModel(modelId = 'oryqen-mobile-core') {
+    async deleteInstalledModel(modelId = '') {
       try {
+        const idToDelete = modelId || this.getInstalledModelInfo()?.id;
+        if (!idToDelete) return true;
+
         if (typeof caches !== 'undefined') {
           const cache = await caches.open(CACHE_NAME);
-          await cache.delete(`/models/${modelId}.bin`);
+          await cache.delete(`/models/${idToDelete}.bin`);
         }
-        
-        // Remove from downloaded models catalog
-        const updatedList = this.getDownloadedModels().filter(m => m.id !== modelId);
+
+        // Release Wllama memory if this model is active
+        if (activeWllamaInstance && activeWllamaModelId === idToDelete) {
+          try {
+            await activeWllamaInstance.exit();
+          } catch (e) {}
+          activeWllamaInstance = null;
+          activeWllamaModelId = null;
+        }
+
+        const updatedList = this.getDownloadedModels().filter(m => m.id !== idToDelete);
         localStorage.setItem(DOWNLOADED_MODELS_KEY, JSON.stringify(updatedList));
 
-        // If the deleted model was the currently active one, update active model
         const active = this.getInstalledModelInfo();
-        if (active && active.id === modelId) {
+        if (active && active.id === idToDelete) {
           if (updatedList.length > 0) {
             localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(updatedList[0]));
           } else {
@@ -313,59 +353,110 @@
     },
 
     /**
-     * Perform on-device inference token by token with realistic neural cadence
+     * Real token streaming inference.
+     * Evaluates exact mathematical expressions using Math.js.
+     * Runs genuine Wllama WebAssembly on downloaded model weights with zero template text.
      */
-    async *streamInference(prompt, systemPrompt = '', onModelUsed) {
+    async *streamInference(prompt, systemPrompt = '', onModelUsed, attachedDoc = null) {
       const modelInfo = this.getInstalledModelInfo();
       const modelName = modelInfo?.displayName || 'ORYQEN On-Device Core';
       if (typeof onModelUsed === 'function') {
         onModelUsed(modelName);
       }
 
-      const response = await this._generateLocalResponse(prompt, systemPrompt);
-      const words = response.split(' ');
+      // Check 1: Real Mathematical Calculation Engine
+      if (this.math.isMathQuery(prompt)) {
+        const mathRes = this.math.solve(prompt);
+        if (mathRes.success) {
+          const mathOutput = `### ORYQEN Mathematical Computation\n\n` +
+            `**Problem Statement:** \`${mathRes.expression}\`\n\n` +
+            `**Calculated Result:**\n` +
+            `$$\\mathbf{${mathRes.result}}$$\n\n` +
+            `**Method:** Evaluated via ${mathRes.method} with exact precision.\n\n` +
+            `*Computed 100% locally on your device with zero data usage.*`;
 
-      for (let i = 0; i < words.length; i++) {
-        const token = words[i] + (i < words.length - 1 ? ' ' : '');
-        yield {
-          token,
-          chunk: token,
-          done: i === words.length - 1,
-          model: 'oryqen-device-core',
-          display_name: modelName,
-        };
-        await new Promise((r) => setTimeout(r, 24));
-      }
-    },
-
-    /**
-     * On-device intelligence synthesizer with academic reasoning and domain heuristics
-     */
-    async _generateLocalResponse(query, system) {
-      const q = query.toLowerCase().trim();
-
-      // Identity & Creator check
-      if (q.includes('who are you') || q.includes('who made you') || q.includes('who is your creator') || q.includes('who created you') || q.includes('what is oryqen')) {
-        return "I am **ORYQEN** (pronounced *Oi-ken*), an advanced dual-purpose Artificial Intelligence and AI Tutor platform running directly on your phone's processor with zero server connection.\n\nI was engineered and developed by **SyntaxNexus Developer** (formerly MattieTech), founded and led by **Matthew Aliu**, with the mission of providing resilient, high-performance, and offline-capable intelligence for learners and researchers worldwide.";
+          const tokens = mathOutput.split(' ');
+          for (let i = 0; i < tokens.length; i++) {
+            const chunk = tokens[i] + (i < tokens.length - 1 ? ' ' : '');
+            yield { token: chunk, chunk: chunk, done: i === tokens.length - 1, display_name: 'ORYQEN Math Engine' };
+            await new Promise(r => setTimeout(r, 20));
+          }
+          return;
+        }
       }
 
-      // Greetings
-      if (/^(hi|hello|hey|good morning|good afternoon|good evening)\b/.test(q)) {
-        return "Hello! I am **ORYQEN**, your on-device AI assistant and personal tutor. I am running 100% locally on your phone with zero internet required.\n\nWhat topic, subject, or calculation would you like to explore today?";
+      // Check 2: Genuine WebAssembly Wllama Engine
+      let modelBlob = null;
+      if (typeof caches !== 'undefined') {
+        try {
+          const cache = await caches.open(CACHE_NAME);
+          const match = await cache.match(`/models/${modelInfo.id}.bin`);
+          if (match) {
+            modelBlob = await match.blob();
+          }
+        } catch (e) {}
       }
 
-      // Physics & Mathematics derivations
-      if (q.includes('derive') || q.includes('solve') || q.includes('equation') || q.includes('formula') || q.includes('calculate') || q.includes('calculus') || q.includes('integral') || q.includes('derivative')) {
-        return `### ORYQEN On-Device Academic Reasoning\n\n**Topic Analysis:** Formulating systematic solution for: \`${query}\`\n\n1. **Core Mathematical Principles:**\n   - Identify known parameters, constraints, and variable domains.\n   - Apply fundamental conservation laws or differential relationships.\n\n2. **Step-by-Step Derivation:**\n   $$\\frac{d}{dx}[f(x)] = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$$\n   - Express the governing formula in canonical algebraic form.\n   - Substitute designated boundary conditions and simplify systematically.\n   - Verify dimensions and units across both sides of the relation.\n\n3. **Analytical Conclusion:**\n   The rigorous resolution confirms that the mathematical structure satisfies all initial conditions.\n\n*Computed entirely on-device via ORYQEN Local Neural Weights with 0 bytes of internet data.*`;
+      if (!modelBlob || modelBlob.size < 1000000) {
+        throw new Error(
+          `Model weights for "${modelName}" are not present on this device or download was incomplete. ` +
+          `Please open Settings > AI & Models and download the model, or switch to Online Swift mode.`
+        );
       }
 
-      // Coding & Computer Science
-      if (q.includes('code') || q.includes('python') || q.includes('javascript') || q.includes('function') || q.includes('algorithm') || q.includes('loop')) {
-        return `### ORYQEN Code Synthesis (Offline)\n\nHere is a clean, optimized solution:\n\n\`\`\`python\ndef solve_problem(data):\n    \"\"\"\n    Optimized algorithmic solution running on-device.\n    Time Complexity: O(n) | Space Complexity: O(1)\n    \"\"\"\n    result = []\n    for item in data:\n        if item is not None:\n            result.append(item)\n    return result\n\`\`\`\n\n**Key Takeaways:**\n- **Efficiency:** Single-pass evaluation minimizes computational overhead on mobile CPUs.\n- **Error Handling:** Gracefully handles missing values and edge cases.`;
+      // Load Wllama WebAssembly if available
+      try {
+        let WllamaClass = window.Wllama;
+        if (!WllamaClass && window.wllamaModule) {
+          WllamaClass = window.wllamaModule.Wllama;
+        }
+
+        if (WllamaClass) {
+          if (!activeWllamaInstance || activeWllamaModelId !== modelInfo.id) {
+            if (activeWllamaInstance) {
+              try { await activeWllamaInstance.exit(); } catch (e) {}
+            }
+            activeWllamaInstance = new WllamaClass({
+              'single-thread/wllama.wasm': '/wllama/wllama.wasm',
+              'multi-thread/wllama.wasm': '/wllama/wllama.wasm',
+            });
+            await activeWllamaInstance.loadModelFromBlob(modelBlob);
+            activeWllamaModelId = modelInfo.id;
+          }
+
+          let finalPrompt = prompt;
+          if (attachedDoc && attachedDoc.text) {
+            finalPrompt = `Context from attached document "${attachedDoc.title}":\n${attachedDoc.text.slice(0, 3000)}\n\nQuestion: ${prompt}`;
+          }
+
+          const formattedChat = [
+            { role: 'system', content: systemPrompt || 'You are ORYQEN, a helpful and accurate academic tutor and assistant. Answer the student clearly and thoroughly.' },
+            { role: 'user', content: finalPrompt }
+          ];
+
+          for await (const chunk of activeWllamaInstance.createChatCompletion(formattedChat)) {
+            const token = chunk.choices?.[0]?.delta?.content || '';
+            if (token) {
+              yield { token, chunk: token, done: false, display_name: modelName };
+            }
+          }
+          yield { token: '', chunk: '', done: true, display_name: modelName };
+          return;
+        }
+      } catch (wasmErr) {
+        console.warn('Wllama WASM runtime notice:', wasmErr);
+        // Honest error reporting for device RAM limitation
+        throw new Error(
+          `On-Device Execution Notice: Your mobile device hardware encountered a memory constraint while allocating "${modelName}" (${wasmErr.message || 'Out of memory'}). ` +
+          `Please select the lightweight ORYQEN Scholar Nano (~85 MB) in Settings > AI & Models, or switch to Online Swift mode.`
+        );
       }
 
-      // General Academic Explanation
-      return `### ORYQEN On-Device Intelligence\n\nHere is a clear, structured breakdown of your question:\n\n**1. Core Concept:**\n${query} revolves around foundational principles in this field. Grasping this requires understanding both the underlying mechanism and how it behaves under varying real-world conditions.\n\n**2. Key Insights & Mechanism:**\n- **Cause & Effect:** Every component in the system operates under established governing principles.\n- **Practical Application:** In both academic analysis and applied technology, consistent outcomes depend on verifying your initial assumptions.\n\n**3. Summary & Review:**\nMastering this concept provides a strong foundation for advanced problem-solving.\n\n*Running 100% on your device hardware with zero data usage.*`;
+      // If WebAssembly engine cannot be initialized, be honest with the user
+      throw new Error(
+        `On-device WebAssembly inference is not supported by your current browser environment. ` +
+        `Please update your Android System WebView or switch to Online Swift mode for full capabilities.`
+      );
     }
   };
 

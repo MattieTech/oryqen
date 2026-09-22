@@ -4,12 +4,16 @@
  * Provides complete offline shell resilience, asset caching, and offline status handling.
  */
 
-const CACHE_NAME = 'oryqen-static-v7';
+const CACHE_NAME = 'oryqen-static-v1-0-0';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
   '/app.js',
+  '/offline-engine.js',
+  '/math.min.js',
+  '/pdf.min.js',
+  '/pdf.worker.min.js',
   '/manifest.json',
   'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css',
   'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js',
