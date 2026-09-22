@@ -35,36 +35,39 @@ if !ERRORLEVEL! equ 0 (
 
 echo.
 echo [2/3] Detecting Python environment...
-set "PY_CMD="
+set "SYSTEM_PY="
 
-if exist "%~dp0backend\venv\Scripts\python.exe" (
-    "%~dp0backend\venv\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
-    if !ERRORLEVEL! equ 0 (
-        set "PY_CMD=%~dp0backend\venv\Scripts\python.exe"
-    )
-)
-
-if "!PY_CMD!"=="" (
-    py -3 -c "import sys; sys.exit(0)" >nul 2>&1
-    if !ERRORLEVEL! equ 0 (
-        set "PY_CMD=py -3"
-    )
-)
-
-if "!PY_CMD!"=="" (
+REM Check system Python
+py -3 -c "import sys; sys.exit(0)" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    set "SYSTEM_PY=py -3"
+) else (
     python -c "import sys; sys.exit(0)" >nul 2>&1
     if !ERRORLEVEL! equ 0 (
-        set "PY_CMD=python"
+        set "SYSTEM_PY=python"
     )
 )
 
-if "!PY_CMD!"=="" (
-    echo [ERROR] No working Python 3 installation found!
-    echo Please ensure Python is installed and added to PATH.
-    pause
-    exit /b 1
+REM If virtual environment doesn't exist, create it automatically
+if not exist "%~dp0backend\venv\Scripts\python.exe" (
+    if "!SYSTEM_PY!"=="" (
+        echo [ERROR] No working Python 3 installation found on your system!
+        echo Please install Python 3.10+ from https://www.python.org/downloads/
+        echo (Remember to check "Add python.exe to PATH" during installation)
+        pause
+        exit /b 1
+    )
+    echo   [INFO] First-time setup: Creating Python virtual environment...
+    cd /d "%~dp0backend"
+    !SYSTEM_PY! -m venv venv
+    echo   [INFO] Installing required neural packages...
+    "%~dp0backend\venv\Scripts\python.exe" -m pip install --upgrade pip
+    "%~dp0backend\venv\Scripts\python.exe" -m pip install -r requirements.txt
+    cd /d "%~dp0"
+    echo   [OK] Environment setup complete!
 )
 
+set "PY_CMD=%~dp0backend\venv\Scripts\python.exe"
 echo   [OK] Using Python: !PY_CMD!
 
 echo.

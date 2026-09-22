@@ -273,6 +273,10 @@ function setupNavigation() {
     startNewChat();
     if (window.innerWidth <= 768) closeSidebar();
   });
+  document.getElementById('headerNewChatBtn')?.addEventListener('click', () => {
+    startNewChat();
+    if (window.innerWidth <= 768 && window.closeSidebar) closeSidebar();
+  });
   // Quick Theme Switcher in Header (Light / OLED Monochrome Dark)
   document.getElementById('headerThemeToggleBtn')?.addEventListener('click', () => {
     const isDark = document.body.classList.contains('theme-dark') || document.body.classList.contains('theme-titanium');
@@ -1001,7 +1005,7 @@ async function startVoiceRecording() {
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = 'en-US';
+        recognition.lang = navigator.language || 'en-US';
 
         recognition.onresult = (event) => {
           let accumulated = '';
@@ -1108,6 +1112,12 @@ async function sendVoiceMessage() {
   const transcription = state.voice.liveTranscript || '';
   discardVoiceRecording();
 
+  // If in offline mode and client speech recognition captured the text, submit directly on-device
+  if (state.mode === 'offline' && transcription) {
+    submitUserMessage(transcription);
+    return;
+  }
+
   const thinkingId = 'voice-thinking-' + Date.now();
   appendThinkingRow(thinkingId, 'Transcribing & processing voice question...');
   scrollToBottom();
@@ -1147,6 +1157,11 @@ async function sendVoiceMessage() {
     };
     appendMessageRow(asstMsg);
     state.messages.push(asstMsg);
+    if (!state.currentConversationId) {
+      state.currentConversationId = 'conv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      localStorage.setItem('oryqen_current_conv_id', state.currentConversationId);
+    }
+    saveCurrentConversationLocally();
     scrollToBottom();
 
     // Speak aloud response
@@ -1157,7 +1172,11 @@ async function sendVoiceMessage() {
       showToast('Voice service fallback — submitting transcription', 'info');
       submitUserMessage(transcription);
     } else {
-      showToast(`Voice error: ${err.message}`, 'error');
+      if (state.mode === 'offline') {
+        showToast('In Offline Mode, please speak clearly for speech recognition, or type your question.', 'info');
+      } else {
+        showToast(`Voice error: ${err.message}`, 'error');
+      }
     }
   }
 }
@@ -1269,6 +1288,12 @@ async function submitUserMessage(overrideQuery) {
   appendMessageRow({ role: 'user', content: query });
   state.messages.push({ role: 'user', content: query });
 
+  if (!state.currentConversationId) {
+    state.currentConversationId = 'conv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    localStorage.setItem('oryqen_current_conv_id', state.currentConversationId);
+  }
+  saveCurrentConversationLocally();
+
   if (input) {
     input.value = '';
     input.style.height = 'auto';
@@ -1326,6 +1351,7 @@ async function submitUserMessage(overrideQuery) {
           } else {
             updateStreamingAssistantRow(assistantBubble, fullContent);
             state.messages.push({ role: 'assistant', content: fullContent, model: 'oryqen-device-core' });
+            saveCurrentConversationLocally();
           }
         } catch (infErr) {
           if (!fullContent) assistantBubble?.closest('.message-row')?.remove();
@@ -1424,11 +1450,21 @@ async function submitUserMessage(overrideQuery) {
           if (trimmed.startsWith('data: ')) {
             try {
               const data = JSON.parse(trimmed.slice(6));
-              if (data.conversation_id && !state.currentConversationId) {
+              if (data.conversation_id && state.currentConversationId !== data.conversation_id) {
+                const oldId = state.currentConversationId;
                 state.currentConversationId = data.conversation_id;
                 localStorage.setItem('oryqen_current_conv_id', state.currentConversationId);
+                if (oldId && oldId.startsWith('conv_')) {
+                  const cachedMsgs = localStorage.getItem(`oryqen_conv_msgs_${oldId}`);
+                  if (cachedMsgs) {
+                    localStorage.setItem(`oryqen_conv_msgs_${data.conversation_id}`, cachedMsgs);
+                    localStorage.removeItem(`oryqen_conv_msgs_${oldId}`);
+                  }
+                  const conv = state.conversations.find(c => c.id === oldId);
+                  if (conv) conv.id = data.conversation_id;
+                }
                 document.getElementById('currentChatTitle').textContent = query.slice(0, 32);
-                loadConversations();
+                saveCurrentConversationLocally();
               }
 
               if (data.chunk) {
@@ -1483,6 +1519,7 @@ async function submitUserMessage(overrideQuery) {
             } else {
               updateStreamingAssistantRow(assistantBubble, localContent);
               state.messages.push({ role: 'assistant', content: localContent, model: 'oryqen-device-core' });
+              saveCurrentConversationLocally();
             }
           } catch (e) {
             assistantBubble.closest('.message-row')?.remove();
@@ -1515,6 +1552,7 @@ async function submitUserMessage(overrideQuery) {
           updateStreamingAssistantRow(assistantBubble, fullContent);
         }
         state.messages.push({ role: 'assistant', content: fullContent, model: modelUsed });
+        saveCurrentConversationLocally();
       }
     } else {
       // Synchronous fallback
@@ -1525,11 +1563,11 @@ async function submitUserMessage(overrideQuery) {
       });
       const data = await fallbackRes.json().catch(() => ({}));
       removeElement(thinkingId);
-      if (data.conversation_id && !state.currentConversationId) {
+      if (data.conversation_id && state.currentConversationId !== data.conversation_id) {
         state.currentConversationId = data.conversation_id;
         localStorage.setItem('oryqen_current_conv_id', state.currentConversationId);
         document.getElementById('currentChatTitle').textContent = query.slice(0, 32);
-        loadConversations();
+        saveCurrentConversationLocally();
       }
 
       if (!fallbackRes.ok || !data.answer) {
@@ -1546,6 +1584,7 @@ async function submitUserMessage(overrideQuery) {
           model: data.display_name || data.model || 'ORYQEN',
         });
         state.messages.push({ role: 'assistant', content: data.answer });
+        saveCurrentConversationLocally();
       }
       scrollToBottom();
     }
@@ -1936,6 +1975,7 @@ function startNewChat() {
     chatInput.value = '';
     chatInput.focus();
   }
+  renderConversationsList();
 }
 
 function renderMathFormula(formula, isBlock) {
@@ -2181,20 +2221,78 @@ function escapeHtml(str) {
 // ==========================================================================
 // Conversations List
 // ==========================================================================
-async function loadConversations() {
-  try {
-    const res = await fetch(`${API_BASE}/api/conversations?user_id=${state.user.id}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    state.conversations = data.conversations || [];
-    renderConversationsList();
+function saveCurrentConversationLocally() {
+  if (!state.currentConversationId) return;
 
-    // Auto-restore active conversation if available
-    const savedConvId = localStorage.getItem('oryqen_current_conv_id');
-    if (savedConvId && !state.currentConversationId && state.conversations.some(c => c.id === savedConvId)) {
-      openConversation(savedConvId);
+  const firstUserMsg = state.messages.find(m => m.role === 'user');
+  const title = firstUserMsg 
+    ? (firstUserMsg.content.slice(0, 32) + (firstUserMsg.content.length > 32 ? '...' : '')) 
+    : 'Session';
+
+  let conv = state.conversations.find(c => c.id === state.currentConversationId);
+  if (!conv) {
+    conv = {
+      id: state.currentConversationId,
+      title: title,
+      mode: state.mode,
+      capability: state.workspace,
+      purpose: state.workspace,
+      tutor_mode: state.tutorMode,
+      created_at: new Date().toISOString(),
+    };
+    state.conversations.unshift(conv);
+  } else {
+    if (conv.title === 'Session' || !conv.title) {
+      conv.title = title;
+    }
+  }
+
+  try {
+    localStorage.setItem('oryqen_conversations_cache', JSON.stringify(state.conversations));
+    localStorage.setItem(`oryqen_conv_msgs_${state.currentConversationId}`, JSON.stringify(state.messages));
+  } catch (e) {}
+
+  document.getElementById('currentChatTitle').textContent = conv.title || 'ORYQEN';
+  renderConversationsList();
+}
+
+async function loadConversations() {
+  // 1. Instant local storage cache recovery (works offline in Airplane mode)
+  try {
+    const cached = localStorage.getItem('oryqen_conversations_cache');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        state.conversations = parsed;
+        renderConversationsList();
+      }
+    }
+  } catch (e) {}
+
+  // 2. Refresh from backend server if reachable
+  try {
+    const res = await fetch(`${API_BASE}/api/conversations?user_id=${state.user.id}`, {
+      signal: AbortSignal.timeout(3500),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.conversations && Array.isArray(data.conversations)) {
+        const serverConvs = data.conversations;
+        const localOnly = state.conversations.filter(lc => !serverConvs.some(sc => sc.id === lc.id));
+        state.conversations = [...localOnly, ...serverConvs];
+        try {
+          localStorage.setItem('oryqen_conversations_cache', JSON.stringify(state.conversations));
+        } catch (e) {}
+        renderConversationsList();
+      }
     }
   } catch (err) {}
+
+  // 3. Auto-restore active conversation if available
+  const savedConvId = localStorage.getItem('oryqen_current_conv_id');
+  if (savedConvId && !state.currentConversationId && state.conversations.some(c => c.id === savedConvId)) {
+    openConversation(savedConvId);
+  }
 }
 
 function renderConversationsList() {
@@ -2227,6 +2325,7 @@ function renderConversationsList() {
 
     btn.addEventListener('click', (e) => {
       if (e.target.classList.contains('conv-delete-btn')) {
+        e.stopPropagation();
         deleteConversation(c.id);
       } else {
         openConversation(c.id);
@@ -2343,16 +2442,20 @@ async function openConversation(convId) {
 async function deleteConversation(convId) {
   try {
     await fetch(`${API_BASE}/api/conversations/${convId}`, { method: 'DELETE' });
-    state.conversations = state.conversations.filter(c => c.id !== convId);
-    if (state.currentConversationId === convId) {
-      startNewChat();
-    } else {
-      renderConversationsList();
-    }
-    showToast('Conversation deleted.');
-  } catch (err) {
-    showToast('Failed to delete.', 'error');
+  } catch (err) {}
+
+  state.conversations = state.conversations.filter(c => c.id !== convId);
+  try {
+    localStorage.setItem('oryqen_conversations_cache', JSON.stringify(state.conversations));
+    localStorage.removeItem(`oryqen_conv_msgs_${convId}`);
+  } catch (e) {}
+
+  if (state.currentConversationId === convId) {
+    startNewChat();
+  } else {
+    renderConversationsList();
   }
+  showToast('Conversation deleted.');
 }
 
 // ==========================================================================

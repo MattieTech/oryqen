@@ -1,5 +1,9 @@
 import httpx
 import json
+import sys
+
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 client = httpx.Client(base_url="http://127.0.0.1:8000", timeout=20.0)
 

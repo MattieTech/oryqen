@@ -51,9 +51,10 @@ def transcribe_with_gemini(file_path: Path, api_key: str) -> Optional[str]:
         mime_type = _get_audio_mimetype(file_path)
 
         prompt = (
-            "Transcribe the spoken words in this audio recording verbatim into English text. "
-            "Output only the exact transcribed words spoken. Do not add any introductory text, "
-            "do not add quotes, do not explain, and do not summarize. If no speech is present, return empty."
+            "Listen carefully to this audio recording and transcribe all spoken words verbatim into text. "
+            "Accurately transcribe all words, questions, and sentences regardless of accent, volume, or dialect. "
+            "Output only the exact transcribed speech. Do not add quotes, metadata, or explanations. "
+            "Only if the recording is completely silent or pure static noise, return empty."
         )
 
         payload = {
@@ -61,8 +62,8 @@ def transcribe_with_gemini(file_path: Path, api_key: str) -> Optional[str]:
                 "parts": [
                     {"text": prompt},
                     {
-                        "inline_data": {
-                            "mime_type": mime_type,
+                        "inlineData": {
+                            "mimeType": mime_type,
                             "data": b64_audio,
                         }
                     }
