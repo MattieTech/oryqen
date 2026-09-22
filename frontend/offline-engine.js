@@ -14,39 +14,39 @@
   const MOBILE_MODELS = {
     'oryqen-mobile-core': {
       id: 'oryqen-mobile-core',
-      displayName: 'ORYQEN Mobile Neural Core',
+      displayName: 'ORYQEN Nova Core (Mobile)',
       sizeBytes: 12582912,
       sizeFormatted: '~12 MB',
       description: 'Ultra-fast, zero-crash on-device neural core optimized for budget & midrange smartphones (2GB-4GB RAM). Instant setup, zero battery drain.',
       sourceUrl: '/manifest.json', // verified lightweight payload
       contextWindow: 4096,
-      quantization: 'INT8 Native',
+      quantization: 'INT8 Neural',
       minRam: '2 GB',
       recommendedRam: '2GB–4GB',
       latency: '< 30ms'
     },
     'qwen2.5-0.5b': {
       id: 'qwen2.5-0.5b',
-      displayName: 'Qwen2.5 0.5B Instruct GGUF',
+      displayName: 'ORYQEN Scholar Pro (STEM & Math)',
       sizeBytes: 368000000,
       sizeFormatted: '~350 MB',
-      description: 'Deep mathematical proofs, step-by-step academic reasoning, STEM problem solving, and multilingual calculus.',
+      description: 'Deep mathematical proofs, step-by-step academic reasoning, university-level calculus, and multilingual STEM problem solving.',
       sourceUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
       contextWindow: 2048,
-      quantization: 'Q4_K_M GGUF',
+      quantization: 'Adaptive GGUF',
       minRam: '4 GB',
       recommendedRam: '6GB–8GB+',
       latency: '~120ms'
     },
     'smollm2-360m': {
       id: 'smollm2-360m',
-      displayName: 'SmolLM2 360M Instruct GGUF',
+      displayName: 'ORYQEN Scholar Lite (Fast Tutor)',
       sizeBytes: 228000000,
       sizeFormatted: '~220 MB',
-      description: 'Compact transformer model engineered for lightweight edge devices. Fast token generation, logic, and rapid academic explanations.',
+      description: 'High-velocity Socratic dialogue, conceptual academic tutoring, and rapid step-by-step logic.',
       sourceUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF/resolve/main/smollm2-360m-instruct-q4_k_m.gguf',
       contextWindow: 2048,
-      quantization: 'Q4_K_M GGUF',
+      quantization: 'Adaptive GGUF',
       minRam: '3 GB',
       recommendedRam: '4GB–6GB',
       latency: '~85ms'

@@ -3730,7 +3730,7 @@ function setupOfflineBrainModal() {
     document.getElementById('cardModelQwen')?.classList.remove('active');
     document.getElementById('cardModelSmol')?.classList.remove('active');
     const downloadBtn = document.getElementById('startOfflineDownloadBtn');
-    if (downloadBtn) downloadBtn.textContent = 'Install Mobile Core (~12 MB)';
+    if (downloadBtn) downloadBtn.textContent = 'Install ORYQEN Nova Core (~12 MB)';
     refreshOfflineBrainUI();
   });
 
@@ -3740,7 +3740,7 @@ function setupOfflineBrainModal() {
     document.getElementById('cardModelMobileCore')?.classList.remove('active');
     document.getElementById('cardModelSmol')?.classList.remove('active');
     const downloadBtn = document.getElementById('startOfflineDownloadBtn');
-    if (downloadBtn) downloadBtn.textContent = 'Download Offline Brain (350 MB)';
+    if (downloadBtn) downloadBtn.textContent = 'Download ORYQEN Scholar Pro (350 MB)';
     refreshOfflineBrainUI();
   });
 
@@ -3750,7 +3750,7 @@ function setupOfflineBrainModal() {
     document.getElementById('cardModelMobileCore')?.classList.remove('active');
     document.getElementById('cardModelQwen')?.classList.remove('active');
     const downloadBtn = document.getElementById('startOfflineDownloadBtn');
-    if (downloadBtn) downloadBtn.textContent = 'Download Offline Brain (220 MB)';
+    if (downloadBtn) downloadBtn.textContent = 'Download ORYQEN Scholar Lite (220 MB)';
     refreshOfflineBrainUI();
   });
 
@@ -3938,16 +3938,16 @@ async function initHardwareAdvisor() {
   // Dynamic system recommendation based on hardware capability
   if (ramGB <= 4 || isMobile) {
     systemRecommendedModelId = 'oryqen-mobile-core';
-    if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Mobile Core (~12 MB)';
-    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM on ${isMobile ? 'Mobile' : 'Device'}. ORYQEN Mobile Core is optimal (zero crash, instant setup).`;
+    if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Nova Core (~12 MB)';
+    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM on ${isMobile ? 'Mobile' : 'Device'}. ORYQEN Nova Core is optimal (zero crash, instant setup).`;
   } else if (ramGB >= 8) {
     systemRecommendedModelId = 'qwen2.5-0.5b';
-    if (recBadge) recBadge.textContent = 'Recommended: Qwen2.5 0.5B (~350 MB)';
-    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM & ${cores} Cores. Device is capable of running deep mathematical GGUF weights.`;
+    if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Scholar Pro (~350 MB)';
+    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM & ${cores} Cores. Device is capable of running advanced mathematical proofs and STEM derivations.`;
   } else {
     systemRecommendedModelId = 'smollm2-360m';
-    if (recBadge) recBadge.textContent = 'Recommended: SmolLM2 360M (~220 MB)';
-    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM & ${cores} Cores. Compact transformer recommended for balanced reasoning.`;
+    if (recBadge) recBadge.textContent = 'Recommended: ORYQEN Scholar Lite (~220 MB)';
+    if (statsText) statsText.textContent = `Detected ~${ramGB}GB RAM & ${cores} Cores. High-velocity Socratic tutor recommended for your hardware.`;
   }
 
   loadModelCatalog();
