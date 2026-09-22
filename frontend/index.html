@@ -1836,6 +1836,18 @@
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
     }
   </script>
+  <script type="module">
+    try {
+      import('./wllama/wllama.js').then(mod => {
+        window.Wllama = mod.Wllama;
+        window.wllamaModule = mod;
+      }).catch(err => {
+        console.warn('Pre-loading Wllama module failed:', err);
+      });
+    } catch (e) {
+      console.warn('Module import not supported:', e);
+    }
+  </script>
   <script src="offline-engine.js"></script>
   <script src="app.js"></script>
 </body>

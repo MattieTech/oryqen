@@ -18,7 +18,7 @@
       sizeBytes: 88000000,
       sizeFormatted: '~85 MB',
       description: 'Ultra-fast, zero-crash on-device neural core optimized for budget & midrange smartphones (2GB–3GB RAM). Low memory footprint, zero lag.',
-      sourceUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct-GGUF/resolve/main/smollm2-135m-instruct-q4_k_m.gguf',
+      sourceUrl: 'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q4_K_M.gguf',
       contextWindow: 2048,
       quantization: 'Q4_K_M GGUF',
       minRam: '2 GB',
@@ -28,10 +28,10 @@
     'smollm2-360m': {
       id: 'smollm2-360m',
       displayName: 'ORYQEN Scholar Lite (Fast Tutor)',
-      sizeBytes: 228000000,
-      sizeFormatted: '~220 MB',
+      sizeBytes: 241000000,
+      sizeFormatted: '~241 MB',
       description: 'High-velocity Socratic dialogue, conceptual academic tutoring, and rapid step-by-step logic for smartphones with 3GB+ RAM.',
-      sourceUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF/resolve/main/smollm2-360m-instruct-q4_k_m.gguf',
+      sourceUrl: 'https://huggingface.co/bartowski/SmolLM2-360M-Instruct-GGUF/resolve/main/SmolLM2-360M-Instruct-Q4_K_M.gguf',
       contextWindow: 2048,
       quantization: 'Q4_K_M GGUF',
       minRam: '3 GB',
@@ -41,8 +41,8 @@
     'qwen2.5-0.5b': {
       id: 'qwen2.5-0.5b',
       displayName: 'ORYQEN Scholar Pro (STEM & Math)',
-      sizeBytes: 468000000,
-      sizeFormatted: '~468 MB',
+      sizeBytes: 398000000,
+      sizeFormatted: '~398 MB',
       description: 'Deep mathematical derivations, university-level problem solving, and multilingual STEM reasoning for phones with 4GB+ RAM.',
       sourceUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
       contextWindow: 2048,
@@ -125,13 +125,15 @@
     },
 
     async isModelDownloaded(modelId) {
-      const list = this.getDownloadedModels();
-      if (list.some(m => m.id === modelId)) return true;
+      if (!modelId) return false;
       if (typeof caches !== 'undefined') {
         try {
           const cache = await caches.open(CACHE_NAME);
           const match = await cache.match(`/models/${modelId}.bin`);
-          return Boolean(match);
+          if (match) {
+            const b = await match.blob();
+            if (b && b.size > 1000000) return true;
+          }
         } catch (e) {}
       }
       return false;
@@ -156,8 +158,9 @@
       if (!saved) return false;
       try {
         const info = JSON.parse(saved);
-        if (modelId) return info && info.id === modelId;
-        return Boolean(info && info.id);
+        const targetId = modelId || (info && info.id);
+        if (!targetId) return false;
+        return await this.isModelDownloaded(targetId);
       } catch (e) {
         return false;
       }
@@ -231,24 +234,17 @@
           effectiveTotal = parseInt(contentLength, 10);
         }
 
-        // Cache write stream
-        let cachePromise = Promise.resolve();
-        let cacheUrl = `/models/${modelMeta.id}.bin`;
-        if (typeof caches !== 'undefined') {
-          try {
-            const cache = await caches.open(CACHE_NAME);
-            const cacheClone = response.clone();
-            cachePromise = cache.put(cacheUrl, cacheClone).catch(() => {});
-          } catch (e) {}
-        }
-
         const reader = response.body ? response.body.getReader() : null;
+        const chunks = [];
 
         if (reader) {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            transferred += (value ? value.length : 0);
+            if (value) {
+              chunks.push(value);
+              transferred += value.length;
+            }
 
             const elapsedSec = Math.max(0.1, (Date.now() - startTime) / 1000);
             const speedBps = transferred / elapsedSec;
@@ -267,9 +263,24 @@
           }
         }
 
-        await cachePromise;
+        // Cache the assembled model Blob reliably
+        const modelBlob = new Blob(chunks, { type: 'application/octet-stream' });
+        const cacheUrl = `/models/${modelMeta.id}.bin`;
+        if (typeof caches !== 'undefined') {
+          try {
+            const cache = await caches.open(CACHE_NAME);
+            await cache.put(cacheUrl, new Response(modelBlob, {
+              headers: {
+                'Content-Type': 'application/octet-stream',
+                'Content-Length': modelBlob.size.toString(),
+              }
+            }));
+          } catch (cErr) {
+            console.warn('CacheStorage put warning:', cErr);
+          }
+        }
 
-        const finalMb = (effectiveTotal / (1024 * 1024)).toFixed(1);
+        const finalMb = (modelBlob.size / (1024 * 1024)).toFixed(1);
         const modelRecord = {
           id: modelMeta.id,
           displayName: modelMeta.displayName,
@@ -410,17 +421,30 @@
         if (!WllamaClass && window.wllamaModule) {
           WllamaClass = window.wllamaModule.Wllama;
         }
+        if (!WllamaClass) {
+          try {
+            const mod = await import('./wllama/wllama.js');
+            WllamaClass = mod.Wllama;
+            window.Wllama = mod.Wllama;
+            window.wllamaModule = mod;
+          } catch (e) {
+            console.warn('Wllama dynamic import failed:', e);
+          }
+        }
 
         if (WllamaClass) {
           if (!activeWllamaInstance || activeWllamaModelId !== modelInfo.id) {
             if (activeWllamaInstance) {
               try { await activeWllamaInstance.exit(); } catch (e) {}
             }
+            const wasmUrl = new URL('./wllama/wllama.wasm', window.location.href).href;
             activeWllamaInstance = new WllamaClass({
-              'single-thread/wllama.wasm': '/wllama/wllama.wasm',
-              'multi-thread/wllama.wasm': '/wllama/wllama.wasm',
+              'default': wasmUrl,
+              'wllama.wasm': wasmUrl,
+              'single-thread/wllama.wasm': wasmUrl,
+              'multi-thread/wllama.wasm': wasmUrl,
             });
-            await activeWllamaInstance.loadModelFromBlob(modelBlob);
+            await activeWllamaInstance.loadModel([modelBlob]);
             activeWllamaModelId = modelInfo.id;
           }
 
@@ -434,8 +458,14 @@
             { role: 'user', content: finalPrompt }
           ];
 
-          for await (const chunk of activeWllamaInstance.createChatCompletion(formattedChat)) {
-            const token = chunk.choices?.[0]?.delta?.content || '';
+          const completionStream = await activeWllamaInstance.createChatCompletion({
+            messages: formattedChat,
+            stream: true,
+            n_predict: 512,
+          });
+
+          for await (const chunk of completionStream) {
+            const token = chunk?.choices?.[0]?.delta?.content || '';
             if (token) {
               yield { token, chunk: token, done: false, display_name: modelName };
             }

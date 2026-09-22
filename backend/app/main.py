@@ -2086,6 +2086,26 @@ async def get_database_schema():
     return {"status": "success", "schema_sql": sql_content}
 
 
+@app.get("/download-apk")
+@app.get("/oryqen-v1.0.0.apk")
+@app.get("/api/download-apk")
+async def download_apk():
+    """Directly serve and download the compiled Android APK to phones."""
+    candidates = [
+        Path(__file__).parent.parent.parent / "build-output" / "oryqen-v1.0.0.apk",
+        Path(__file__).parent.parent.parent / "build" / "oryqen-v1.0.0.apk",
+        Path(__file__).parent.parent.parent / "android" / "app" / "build" / "outputs" / "apk" / "release" / "app-release.apk",
+    ]
+    for apk_path in candidates:
+        if apk_path.exists():
+            return FileResponse(
+                path=str(apk_path),
+                filename="oryqen-v1.0.0.apk",
+                media_type="application/vnd.android.package-archive"
+            )
+    raise HTTPException(status_code=404, detail="APK file not found on server.")
+
+
 # === Mount Frontend Static Files ===
 FRONTEND_DIR = Path(__file__).parent.parent.parent / "frontend"
 if FRONTEND_DIR.exists():
@@ -2094,4 +2114,4 @@ if FRONTEND_DIR.exists():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
